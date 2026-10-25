@@ -1,0 +1,14 @@
+[package]
+name = "optistream-clothing"
+description = "OptiStream method for addon clothing and EUP packs (ydd/ytd)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+optistream-core.workspace = true
+optistream-rage.workspace = true
+optistream-texture.workspace = true
+optistream-mesh.workspace = true
+rayon.workspace = true
