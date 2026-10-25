@@ -1,0 +1,11 @@
+[package]
+name = "optistream-mesh"
+description = "Skin-safe decimation of RAGE drawable geometries"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+meshopt.workspace = true
+optistream-rage.workspace = true
