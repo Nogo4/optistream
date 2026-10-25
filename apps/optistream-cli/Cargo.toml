@@ -1,0 +1,12 @@
+[package]
+name = "optistream-cli"
+description = "Command-line front-end of OptiStream (testing and batch use)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+optistream-rage.workspace = true
+optistream-core.workspace = true
+optistream-clothing.workspace = true
