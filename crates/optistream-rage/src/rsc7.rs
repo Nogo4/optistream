@@ -107,15 +107,20 @@ impl Resource {
         let sys_size = system_flags.size() as usize;
         let gfx_size = graphics_flags.size() as usize;
 
-        let mut data = Vec::with_capacity(sys_size + gfx_size);
+        // The sizes come from the file header: a corrupt one must be an error, not an
+        // allocation failure aborting the whole run.
+        let total = sys_size.checked_add(gfx_size).context("RSC7 header declares an absurd size")?;
+        let mut data = Vec::new();
+        data.try_reserve_exact(total).ok().context("RSC7 header declares more memory than available")?;
         DeflateDecoder::new(&bytes[16..])
+            .take(total as u64)
             .read_to_end(&mut data)
             .context("RSC7 payload is not valid deflate data")?;
-        if data.len() < sys_size + gfx_size {
+        if data.len() < total {
             // Some tools truncate trailing zero pages; the game zero-fills them.
-            data.resize(sys_size + gfx_size, 0);
+            data.resize(total, 0);
         }
-        let graphics = data[sys_size..sys_size + gfx_size].to_vec();
+        let graphics = data[sys_size..total].to_vec();
         data.truncate(sys_size);
 
         Ok(Resource { version, system_flags, graphics_flags, system: data, graphics })

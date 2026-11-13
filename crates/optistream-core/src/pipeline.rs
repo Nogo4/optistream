@@ -367,8 +367,40 @@ fn export_root(root: &Path, dir: &Path) -> Result<PathBuf> {
     Ok(dest)
 }
 
+/// Groups the files the method links together (a drawable and its texture variations), in
+/// the order of their first member.
+fn linked_units<'a>(method: &dyn Method, targets: &[&'a FileCtx]) -> Vec<Vec<&'a FileCtx>> {
+    let index: std::collections::HashMap<String, usize> =
+        targets.iter().enumerate().map(|(i, c)| (c.rel_lower(), i)).collect();
+    let mut taken = vec![false; targets.len()];
+    let mut units = Vec::new();
+    for start in 0..targets.len() {
+        if taken[start] {
+            continue;
+        }
+        taken[start] = true;
+        let mut unit = Vec::new();
+        let mut stack = vec![start];
+        while let Some(i) = stack.pop() {
+            unit.push(targets[i]);
+            for linked in method.linked_files(targets[i]) {
+                if let Some(&j) = index.get(&linked).filter(|&&j| !taken[j]) {
+                    taken[j] = true;
+                    stack.push(j);
+                }
+            }
+        }
+        units.push(unit);
+    }
+    units
+}
+
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let tmp = path.with_extension("optistream.tmp");
+    // Appended to the whole file name: files that only differ by their extension are
+    // written in parallel and must not share a temporary file.
+    let mut name = path.file_name().context("file without a name")?.to_os_string();
+    name.push(".optistream.tmp");
+    let tmp = path.with_file_name(name);
     fs::write(&tmp, bytes).with_context(|| format!("écriture de {}", tmp.display()))?;
     fs::rename(&tmp, path).with_context(|| format!("remplacement de {}", path.display()))?;
     Ok(())
@@ -406,9 +438,11 @@ pub fn optimize(
     let skipped = |ctx: &FileCtx| !is_selected(only, ctx) && (in_place || update_only);
     let work: Vec<&FileCtx> = ctxs.iter().filter(|c| !skipped(c)).collect();
 
-    progress.total.store(work.len(), Ordering::Relaxed);
-    progress.done.store(0, Ordering::Relaxed);
     let process = |ctx: &FileCtx| method.handles(ctx) && is_selected(only, ctx);
+    // In place nothing is copied: only the processed files count.
+    let steps = work.iter().filter(|c| !in_place || process(c)).count();
+    progress.total.store(steps, Ordering::Relaxed);
+    progress.done.store(0, Ordering::Relaxed);
     let mut not_written = Vec::new();
 
     // Copies first (ymt, meta, manifest, untouched files): a heavy run interrupted later
@@ -434,14 +468,10 @@ pub fn optimize(
     let mut targets: Vec<&FileCtx> = work.iter().copied().filter(|c| process(c)).collect();
     // Biggest files first: a large file started last would otherwise run alone at the end.
     targets.sort_by_cached_key(|c| std::cmp::Reverse(fs::metadata(root.join(&c.rel)).map(|m| m.len()).unwrap_or(0)));
-    let mut results: Vec<(PathBuf, Option<FileReport>)> = pool()?.install(|| {
-        targets
-            .par_iter()
-            .with_max_len(1)
-            .map(|ctx| {
-                if progress.is_cancelled() {
-                    return (ctx.rel.clone(), None);
-                }
+    // Linked files are rewritten consistently with each other (shared UV crop): a cancelled
+    // run processes all of a unit or none of it, never half.
+    let units = linked_units(method, &targets);
+    let run_file = |ctx: &FileCtx| -> FileReport {
                 let src = root.join(&ctx.rel);
                 let dst = dest.join(&ctx.rel);
                 let report = (|| -> Result<FileReport> {
@@ -495,15 +525,24 @@ pub fn optimize(
                     })
                 })();
                 progress.step(&ctx.rel);
-                let report = report.unwrap_or_else(|e| FileReport {
+                report.unwrap_or_else(|e| FileReport {
                     rel: ctx.rel.clone(),
                     status: FileStatus::Error(format!("{e:#}")),
                     before: SizeInfo::default(),
                     after: SizeInfo::default(),
                     changes: Vec::new(),
                     warnings: Vec::new(),
-                });
-                (ctx.rel.clone(), Some(report))
+                })
+    };
+    let mut results: Vec<(PathBuf, Option<FileReport>)> = pool()?.install(|| {
+        units
+            .par_iter()
+            .with_max_len(1)
+            .flat_map_iter(|unit| -> Vec<(PathBuf, Option<FileReport>)> {
+                if progress.is_cancelled() {
+                    return unit.iter().map(|ctx| (ctx.rel.clone(), None)).collect();
+                }
+                unit.par_iter().map(|ctx| (ctx.rel.clone(), Some(run_file(ctx)))).collect()
             })
             .collect()
     });

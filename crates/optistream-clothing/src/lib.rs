@@ -69,19 +69,16 @@ fn file_info(ctx: &FileCtx, group: Option<&Group>) -> (Kind, FileInfo) {
     let cloth = kind == Kind::Ydd && ctx.has_sibling_with_ext("yld");
     let skin = kind == Kind::Ytd && naming::is_skin_texture(&name);
     let variation = kind == Kind::Ytd && naming::is_variation_texture(&name);
-    let alpha_mask = variation && drawable_alpha_mask(ctx, &name);
+    let alpha_mask = variation && drawable_alpha_mask(ctx);
     let crop = group.map(|g| g.window);
     (kind, FileInfo { slot, cloth, skin, variation, alpha_mask, crop })
 }
 
 /// Whether the drawable of a diffuse variation only draws its diffuses with alpha shaders.
 /// False when the drawable is missing or unreadable (filtering then stays as for opaque).
-fn drawable_alpha_mask(ctx: &FileCtx, name: &str) -> bool {
+fn drawable_alpha_mask(ctx: &FileCtx) -> bool {
     static CACHE: OnceLock<Mutex<HashMap<(PathBuf, u64), bool>>> = OnceLock::new();
-    let rel = ctx.rel_lower();
-    let dir = rel.rsplit_once('/').map(|(d, _)| format!("{d}/")).unwrap_or_default();
-    let Some(sibling) = naming::drawable_names(name).into_iter().map(|n| format!("{dir}{n}")).find(|r| ctx.all_files.contains(r))
-    else {
+    let Some(sibling) = crop::drawable_of(&ctx.rel_lower(), &ctx.all_files) else {
         return false;
     };
     let path = ctx.root.join(&sibling);
@@ -165,8 +162,9 @@ impl Method for ClothingMethod {
             let plan = crop::plan_run(&f.root, &f.all_files);
             (f.root.clone(), Arc::new(plan))
         });
-        // No crop: an empty plan, so that files are not planned one by one either.
-        let run = run.or_else(|| files.first().map(|f| (f.root.clone(), Arc::new(RunPlan::new()))));
+        // No crop: no plan either (`group_of` never plans anything with these settings). A
+        // plan kept from this run would hide the groups from a later comparison made with
+        // the crop switched on.
         *self.run.lock().unwrap() = run;
         Ok(())
     }

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{ensure, Result};
-use optistream_rage::drawable::{self, component, semantic, vb_field, DrawableInfo, GeometryInfo};
+use optistream_rage::drawable::{component, semantic, vb_field, DrawableInfo, GeometryInfo};
 use optistream_rage::joaat::joaat;
 use optistream_rage::rsc7::PageFlags;
 use optistream_rage::texture::{self as rtex, TextureEntry};
@@ -145,7 +145,7 @@ fn join(dir: &str, name: &str) -> String {
 }
 
 /// Drawable (lowercased path) a diffuse variation belongs to, if it exists.
-fn drawable_of(ytd: &str, files: &HashSet<String>) -> Option<String> {
+pub(crate) fn drawable_of(ytd: &str, files: &HashSet<String>) -> Option<String> {
     naming::drawable_names(name_of(ytd)).into_iter().map(|n| join(dir_of(ytd), &n)).find(|r| files.contains(r))
 }
 
@@ -257,32 +257,27 @@ fn plan_group(root: &Path, m: &Members) -> Result<Option<Group>> {
     for rel in &m.ydds {
         let bytes = std::fs::read(root.join(rel))?;
         max_physical = max_physical.max(physical_size(&bytes));
-        process::crop_ready(Kind::Ydd, &bytes)?;
-        let res = Resource::parse(&bytes)?;
-        let drawables = drawable::read_dictionary(&res, 0)?;
-        ensure!(!drawables.is_empty(), "aucun drawable");
-        let mut dicts = HashSet::new();
-        for d in &drawables {
+        let p = process::crop_ready(Kind::Ydd, &bytes)?;
+        ensure!(!p.drawables.is_empty(), "aucun drawable");
+        for d in &p.drawables {
             let embedded: HashSet<String> = match d.texture_dict {
-                Some(td) => rtex::read_dictionary(&res, td)?.into_iter().map(|e| e.name.to_ascii_lowercase()).collect(),
+                Some(td) => rtex::read_dictionary(&p.res, td)?.into_iter().map(|e| e.name.to_ascii_lowercase()).collect(),
                 None => HashSet::new(),
             };
-            check_shaders(d, &embedded)?;
-            uv_bounds(&res, d, &mut bounds)?;
-            if let Some(td) = d.texture_dict.filter(|&td| dicts.insert(td)) {
-                for e in rtex::read_dictionary(&res, td)? {
-                    extent.add(&res, &e)?;
-                }
-            }
+            check_shaders(d, &embedded, !m.ytds.is_empty())?;
+            uv_bounds(&p.res, d, &mut bounds)?;
+        }
+        // Every embedded dictionary, once.
+        for t in &p.textures {
+            extent.add(&p.res, &t.entry)?;
         }
     }
     for rel in &m.ytds {
         let bytes = std::fs::read(root.join(rel))?;
         max_physical = max_physical.max(physical_size(&bytes));
-        process::crop_ready(Kind::Ytd, &bytes)?;
-        let res = Resource::parse(&bytes)?;
-        for e in rtex::read_dictionary(&res, 0)? {
-            extent.add(&res, &e)?;
+        let p = process::crop_ready(Kind::Ytd, &bytes)?;
+        for t in &p.textures {
+            extent.add(&p.res, &t.entry)?;
         }
     }
     if extent.max_w == 0 || bounds[0] > bounds[1] {
@@ -308,8 +303,10 @@ fn physical_size(bytes: &[u8]) -> u64 {
 
 /// Every shader must be one that samples its textures plainly with TEXCOORD0, and every
 /// texture it reads must be cropped with the group: diffuses (variations or embedded),
-/// embedded normal and specular maps, or the unused-sampler placeholder.
-fn check_shaders(d: &DrawableInfo, embedded: &HashSet<String>) -> Result<()> {
+/// embedded normal and specular maps, or the unused-sampler placeholder. A diffuse that is
+/// not embedded must come from a variation of the group (`has_variations`): found nowhere
+/// (`.ytd` kept in another folder), it would stay whole under rewritten UVs.
+fn check_shaders(d: &DrawableInfo, embedded: &HashSet<String>, has_variations: bool) -> Result<()> {
     for s in &d.shaders {
         let name = shaders::shader_name(s).unwrap_or("?");
         ensure!(CROP_SHADERS.contains(&name), "shader {name}");
@@ -319,7 +316,9 @@ fn check_shaders(d: &DrawableInfo, embedded: &HashSet<String>) -> Result<()> {
                 continue;
             }
             match shaders::sampler_usage(*param) {
-                Some(Usage::Role(TextureRole::Diffuse)) => {}
+                Some(Usage::Role(TextureRole::Diffuse)) => {
+                    ensure!(has_variations || embedded.contains(&tex), "diffuse {tex} sans variation .ytd dans le groupe")
+                }
                 Some(Usage::Role(TextureRole::Normal | TextureRole::Specular)) => {
                     ensure!(embedded.contains(&tex), "texture externe {tex}")
                 }

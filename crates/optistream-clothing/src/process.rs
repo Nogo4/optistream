@@ -643,7 +643,8 @@ fn texture_blocks(p: &Parsed) -> Result<BTreeMap<usize, Vec<usize>>, String> {
 
 /// Whether every texture of the file can be cropped: a group is only planned when all of
 /// its members can be rewritten, otherwise UVs and textures would disagree.
-pub fn crop_ready(kind: Kind, bytes: &[u8]) -> Result<()> {
+/// Returns the parsed file, for the planning that follows.
+pub fn crop_ready(kind: Kind, bytes: &[u8]) -> Result<Parsed> {
     let p = parse(kind, bytes, &FileInfo::default())?;
     let blocks = texture_blocks(&p).map_err(anyhow::Error::msg)?;
     for users in blocks.values() {
@@ -657,7 +658,7 @@ pub fn crop_ready(kind: Kind, bytes: &[u8]) -> Result<()> {
             e.name
         );
     }
-    Ok(())
+    Ok(p)
 }
 
 fn optimize_textures(p: &mut Parsed, cfg: &Config, info: &FileInfo, warnings: &mut Vec<String>) -> Result<Vec<String>> {
@@ -701,7 +702,6 @@ fn optimize_textures(p: &mut Parsed, cfg: &Config, info: &FileInfo, warnings: &m
     for ((off, users), encoded) in blocks.iter().zip(encoded) {
         let (off, users) = (*off, users);
         let first = &p.textures[users[0]];
-        let original = p.res.graphics[off..off + first.data_len].to_vec();
         let refs: Vec<usize> = users.iter().map(|&u| p.textures[u].entry.data_ptr_field()).collect();
         match encoded {
             Some(enc) => {
@@ -720,7 +720,7 @@ fn optimize_textures(p: &mut Parsed, cfg: &Config, info: &FileInfo, warnings: &m
                 changes.push(format!("texture {} : {}", first.entry.name, enc.changes.join(", ")));
                 new_blocks.push(GfxBlock { data: enc.data, refs });
             }
-            None => new_blocks.push(GfxBlock { data: original, refs }),
+            None => new_blocks.push(GfxBlock { data: p.res.graphics[off..off + first.data_len].to_vec(), refs }),
         }
     }
 
