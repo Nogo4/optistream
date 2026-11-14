@@ -6,6 +6,7 @@ members = [
     "crates/optistream-mesh",
     "crates/optistream-core",
     "crates/optistream-clothing",
+    "crates/optistream-mapping",
     "apps/optistream",
     "apps/optistream-cli",
 ]
@@ -21,6 +22,7 @@ optistream-texture = { path = "crates/optistream-texture" }
 optistream-mesh = { path = "crates/optistream-mesh" }
 optistream-core = { path = "crates/optistream-core" }
 optistream-clothing = { path = "crates/optistream-clothing" }
+optistream-mapping = { path = "crates/optistream-mapping" }
 
 anyhow = "1"
 flate2 = "1"

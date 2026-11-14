@@ -2413,6 +2413,7 @@ dependencies = [
  "egui_material_icons",
  "optistream-clothing",
  "optistream-core",
+ "optistream-mapping",
  "rfd",
  "serde",
  "serde_json",
@@ -2425,6 +2426,7 @@ dependencies = [
  "anyhow",
  "optistream-clothing",
  "optistream-core",
+ "optistream-mapping",
  "optistream-rage",
 ]
 
@@ -2450,6 +2452,17 @@ dependencies = [
  "serde",
  "serde_json",
  "walkdir",
+]
+
+[[package]]
+name = "optistream-mapping"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "optistream-core",
+ "optistream-rage",
+ "optistream-texture",
+ "rayon",
 ]
 
 [[package]]

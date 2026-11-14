@@ -1,0 +1,13 @@
+[package]
+name = "optistream-mapping"
+description = "OptiStream method for mappings and MLOs (ytd and textures embedded in ydr/ydd)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+optistream-core.workspace = true
+optistream-rage.workspace = true
+optistream-texture.workspace = true
+rayon.workspace = true

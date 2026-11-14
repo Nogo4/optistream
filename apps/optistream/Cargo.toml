@@ -15,3 +15,4 @@ rfd.workspace = true
 egui_material_icons.workspace = true
 optistream-core.workspace = true
 optistream-clothing.workspace = true
+optistream-mapping.workspace = true

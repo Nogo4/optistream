@@ -423,7 +423,7 @@ impl App {
                 }
                 ui.label(RichText::new(self.methods[self.method].description()).small().color(WEAK));
                 ui.add_space(4.0);
-                ui.label(RichText::new("Dossier de la ressource").small().color(WEAK));
+                ui.label(RichText::new("Dossier de la ressource (ou d'une catégorie [...])").small().color(WEAK));
                 theme::path_field(ui, &mut self.source, "Choisir le dossier de la ressource");
             });
             ui.add_space(8.0);
@@ -987,6 +987,32 @@ impl App {
                 }
             }
         });
+        // A category folder ([oren-mappings]) holds many resources: totals for each one.
+        let resources = r.by_resource();
+        if resources.len() > 1 {
+            ui.add_space(4.0);
+            egui::CollapsingHeader::new(RichText::new(format!("Par ressource ({})", resources.len())).strong())
+                .id_salt("report_by_resource")
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical().id_salt("report_by_resource_scroll").max_height(220.0).show(ui, |ui| {
+                        egui::Grid::new("report_by_resource_grid").striped(true).num_columns(4).show(ui, |ui| {
+                            for h in ["Ressource", "> 16 Mio", "Mémoire physique", "Optimisés"] {
+                                ui.label(RichText::new(h).small().color(WEAK));
+                            }
+                            ui.end_row();
+                            for (dir, t) in &resources {
+                                let name = dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "(racine)".to_owned());
+                                ui.label(name).on_hover_text(dir.display().to_string());
+                                let color = if t.warnings_after > 0 { WARN } else { ACCENT };
+                                ui.label(RichText::new(format!("{} → {}", t.warnings_before, t.warnings_after)).color(color));
+                                ui.label(format!("{} → {}", mib(t.graphics_before), mib(t.graphics_after)));
+                                ui.label(format!("{} / {}", t.optimized, t.processed));
+                                ui.end_row();
+                            }
+                        });
+                    });
+                });
+        }
         let mut compare = None;
         let mut reoptimize: Option<HashSet<PathBuf>> = None;
         let idle = self.job.is_none();
@@ -1248,9 +1274,12 @@ impl eframe::App for App {
     }
 }
 
-/// Registered methods. Vehicles and MLOs will be added here once implemented.
+/// Registered methods. Vehicles will be added here once implemented.
 fn registered_methods() -> Vec<Arc<dyn Method>> {
-    vec![Arc::new(optistream_clothing::ClothingMethod::new())]
+    vec![
+        Arc::new(optistream_clothing::ClothingMethod::new()),
+        Arc::new(optistream_mapping::MappingMethod::new()),
+    ]
 }
 
 /// One half of a before/after comparison.

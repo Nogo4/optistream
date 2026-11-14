@@ -1,7 +1,7 @@
 //! Command-line front-end, mainly for testing and batch runs.
 //!
-//! optistream-cli analyze  <resource dir> [--preset id] [--only <relative path>]...
-//! optistream-cli optimize <resource dir> (--out <dir> | --in-place) [--preset id] [--set key=value]... [--overwrite] [--only <relative path>]...
+//! optistream-cli analyze  <resource dir> [--method clothing|mapping] [--preset id] [--only <relative path>]...
+//! optistream-cli optimize <resource dir> (--out <dir> | --in-place) [--method clothing|mapping] [--preset id] [--set key=value]... [--overwrite] [--only <relative path>]...
 //! optistream-cli crops    <resource dir>   (UV crop diagnostics)
 //! optistream-cli inspect  <file>...
 
@@ -16,7 +16,13 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     let has = |name: &str| args.iter().any(|a| a == name);
-    let method = ClothingMethod::new();
+    // `--method clothing|mapping` (clothing by default).
+    let method: Box<dyn Method> = match flag("--method").as_deref() {
+        None | Some("clothing") => Box::new(ClothingMethod::new()),
+        Some("mapping") => Box::new(optistream_mapping::MappingMethod::new()),
+        Some(other) => bail!("unknown method {other} (clothing|mapping)"),
+    };
+    let method = method.as_ref();
     // `--only <relative path>` (repeatable) restricts the run to some files.
     let picked: std::collections::HashSet<PathBuf> =
         args.windows(2).filter(|w| w[0] == "--only").map(|w| PathBuf::from(&w[1])).collect();
@@ -62,7 +68,7 @@ fn main() -> Result<()> {
         }
         Some("analyze") => {
             let root = PathBuf::from(args.get(1).context("missing resource dir")?);
-            let a = optistream_core::analyze(&method, &root, &settings()?, only.as_ref(), &Progress::default())?;
+            let a = optistream_core::analyze(method, &root, &settings()?, only.as_ref(), &Progress::default())?;
             for f in &a.files {
                 match &f.analysis {
                     Ok(an) if !an.issues.is_empty() => {
@@ -87,7 +93,7 @@ fn main() -> Result<()> {
                 (None, true) => Output::InPlace,
                 _ => bail!("choose exactly one of --out <dir> or --in-place"),
             };
-            let report = optistream_core::optimize(&method, &root, &settings()?, &output, only.as_ref(), &Progress::default())?;
+            let report = optistream_core::optimize(method, &root, &settings()?, &output, only.as_ref(), &Progress::default())?;
             println!("{}", report.to_text());
         }
         _ => bail!("usage: optistream-cli (analyze|optimize|crops|inspect) ..."),
