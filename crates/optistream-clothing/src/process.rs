@@ -160,11 +160,15 @@ fn tex_issues(t: &TexItem, data: Option<&[u8]>, cfg: &Config, skin: bool, out: &
     if policy.convert_formats {
         match e.format {
             tf::BC7 | tf::DXT3 => problems.push(format!("format {}", fmt::name(e.format))),
-            tf::A8R8G8B8 | tf::A8B8G8R8 | tf::X8R8G8B8 | tf::A1R5G5B5 => {
+            tf::A8R8G8B8 | tf::A8B8G8R8 | tf::X8R8G8B8 | tf::A1R5G5B5 | tf::A16B16G16R16 => {
                 problems.push(format!("non compressée ({})", fmt::name(e.format)))
             }
             _ => {}
         }
+    }
+    if fmt::layout(e.format).is_none() {
+        // Left as it is by the optimiser: say so, such a texture is often the heavy one.
+        out.push(Issue::info(format!("texture {name} ({}) : format {} non géré, laissée telle quelle", role.label(), fmt::name(e.format))));
     }
     let full = fmt::full_levels(w, h);
     if policy.fix_mips && (e.levels as u32) < full {

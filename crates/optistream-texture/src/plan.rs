@@ -107,7 +107,7 @@ pub fn target_dims(meta: &TextureMeta, policy: &TexturePolicy) -> (u32, u32) {
 fn is_managed_color(format: u32) -> bool {
     matches!(
         format,
-        f::DXT1 | f::DXT3 | f::DXT5 | f::BC7 | f::A8R8G8B8 | f::X8R8G8B8 | f::A8B8G8R8 | f::A1R5G5B5
+        f::DXT1 | f::DXT3 | f::DXT5 | f::BC7 | f::A8R8G8B8 | f::X8R8G8B8 | f::A8B8G8R8 | f::A16B16G16R16 | f::A1R5G5B5
     )
 }
 

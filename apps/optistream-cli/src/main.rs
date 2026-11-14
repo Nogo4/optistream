@@ -90,7 +90,7 @@ fn main() -> Result<()> {
             let report = optistream_core::optimize(&method, &root, &settings()?, &output, only.as_ref(), &Progress::default())?;
             println!("{}", report.to_text());
         }
-        _ => eprintln!("usage: optistream-cli (analyze|optimize|inspect) ..."),
+        _ => bail!("usage: optistream-cli (analyze|optimize|crops|inspect) ..."),
     }
     Ok(())
 }

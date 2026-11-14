@@ -29,7 +29,7 @@ pub fn can_decode(format: u32) -> bool {
     matches!(
         format,
         f::DXT1 | f::DXT3 | f::DXT5 | f::BC7 | f::ATI1 | f::ATI2 | f::A8R8G8B8 | f::X8R8G8B8
-            | f::A8B8G8R8 | f::A1R5G5B5 | f::A8 | f::L8
+            | f::A8B8G8R8 | f::A16B16G16R16 | f::A1R5G5B5 | f::A8 | f::L8
     )
 }
 
@@ -67,6 +67,13 @@ pub fn decode(format: u32, width: u32, height: u32, data: &[u8]) -> Result<Rgba8
             }
         }
         f::A8B8G8R8 => img.data.copy_from_slice(&data[..need]),
+        f::A16B16G16R16 => {
+            // Little-endian 16-bit channels in R, G, B, A order, rounded to 8 bits.
+            for (dst, s) in img.data.iter_mut().zip(data.chunks_exact(2)) {
+                let v = u16::from_le_bytes([s[0], s[1]]) as u32;
+                *dst = ((v * 255 + 32767) / 65535) as u8;
+            }
+        }
         f::A1R5G5B5 => {
             for (dst, s) in img.data.chunks_exact_mut(4).zip(data.chunks_exact(2)) {
                 let v = u16::from_le_bytes([s[0], s[1]]);
@@ -370,6 +377,15 @@ mod tests {
         block.extend_from_slice(&COLOR_C0_LT_C1);
         let img = decode(f::DXT3, 4, 4, &block).unwrap();
         assert_eq!(&img.data[..4], &[170, 0, 85, 255]);
+    }
+
+    #[test]
+    fn sixteen_bit_channels_round_to_eight_bits() {
+        // One texel: R = 0xFFFF, G = 0x8000, B = 0x0000, A = 0x00FF.
+        let data = [0xFF, 0xFF, 0x00, 0x80, 0x00, 0x00, 0xFF, 0x00];
+        let img = decode(f::A16B16G16R16, 1, 1, &data).unwrap();
+        assert_eq!(img.data, [255, 128, 0, 1]);
+        assert_eq!(level_size(f::A16B16G16R16, 4, 2), 64);
     }
 
     #[test]

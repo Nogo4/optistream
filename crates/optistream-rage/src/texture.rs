@@ -25,6 +25,8 @@ pub mod format {
     pub const A1R5G5B5: u32 = 25;
     pub const A8: u32 = 28;
     pub const A8B8G8R8: u32 = 32;
+    /// 16 bits per channel, stored R, G, B, A (some export tools write normal maps this way).
+    pub const A16B16G16R16: u32 = 36;
     pub const L8: u32 = 50;
     pub const DXT1: u32 = 0x3154_5844;
     pub const DXT3: u32 = 0x3354_5844;
