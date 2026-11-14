@@ -20,7 +20,7 @@ use optistream_texture::resource as texres;
 use optistream_texture::{ops, plan, quality, Encoded, Rgba8, TextureMeta, TextureRole};
 use rayon::prelude::*;
 
-use crate::config::Config;
+use crate::config::{Config, FORCE_MAX_STEPS, FORCE_MIN_SIZE};
 use crate::roles::{self, RoleIndex, Usage};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -213,6 +213,8 @@ pub struct BlockPlan {
     pub steps: u32,
     /// Measured loss of those halvings (percent, against the original).
     pub loss: f64,
+    /// Whether the reduction went past the configured limits ("Forcer sous le budget").
+    pub forced: bool,
 }
 
 pub struct FilePlan {
@@ -232,6 +234,9 @@ struct Candidate {
     levels: u32,
     /// `loss[k]` = loss of `k` halvings (index 0 = 0.0); only admissible steps are listed.
     loss: Vec<f64>,
+    /// `tier[k]` of step `k`: 0 within the limits, 1 past them (forced), 2 forced on a text /
+    /// logo or a texture of unknown role. Lower tiers are always spent first.
+    tier: Vec<u8>,
 }
 
 impl Candidate {
@@ -300,7 +305,7 @@ fn plan_with(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
     let users: Vec<texres::BlockUser> = p
         .textures
         .iter()
-        .map(|t| texres::BlockUser { name: &t.entry.name, data_off: t.data_off, ptr_field: t.entry.data_ptr_field() })
+        .map(|t| texres::BlockUser { name: &t.entry.name, data_off: t.data_off, ptr_field: t.entry.data_ptr_field(), name_field: t.entry.name_ptr_field() })
         .collect();
     let physical_before = p.res.graphics_flags.size();
     let blocks = match texres::texture_blocks(&p.res, &users, &texres::raw_ranges(&p.res, &p.drawables)) {
@@ -336,12 +341,16 @@ fn plan_with(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
     let mut encoded: Vec<Option<Encoded>> = (0..blocks.len()).into_par_iter().map(|i| encode(i, 0)).collect::<Result<_>>()?;
     let mut steps = vec![0u32; blocks.len()];
     let mut losses = vec![0f64; blocks.len()];
+    let mut forced = vec![false; blocks.len()];
     let size_of = |enc: &Option<Encoded>, i: usize| enc.as_ref().map(|e| e.data.len()).unwrap_or(original(i).len()) as u64;
     let mut sizes: Vec<u64> = (0..blocks.len()).map(|i| size_of(&encoded[i], i)).collect();
     let mut physical = gfx::packed_size(&p.res, &sizes)?;
 
     // Stage 2: targeted reduction.
     if cfg.budget_enabled && physical > cfg.budget {
+        // Effective limits: the forced reduction goes past the configured ones, down to floors.
+        let floor = if cfg.force { FORCE_MIN_SIZE.min(cfg.min_size) } else { cfg.min_size };
+        let step_cap = if cfg.force { FORCE_MAX_STEPS.max(cfg.max_steps) } else { cfg.max_steps };
         let mut blocked = Blocked::default();
         let mut candidates: Vec<Candidate> = Vec::new();
         for i in 0..blocks.len() {
@@ -350,24 +359,29 @@ fn plan_with(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
                 blocked.protected += sizes[i];
                 continue;
             };
-            if role == TextureRole::Other {
-                // Detail, height, dirt maps: unknown sampling, never reduced.
-                blocked.protected += sizes[i];
-                continue;
-            }
-            if t.readable {
-                blocked.readable += sizes[i];
-                continue;
-            }
+            // Detail, height, dirt maps (unknown sampling) and texts / logos: only when forced, last.
+            let base_tier = if role == TextureRole::Other || t.readable {
+                if !cfg.force {
+                    if t.readable {
+                        blocked.readable += sizes[i];
+                    } else {
+                        blocked.protected += sizes[i];
+                    }
+                    continue;
+                }
+                2
+            } else {
+                0
+            };
             let (format, width, height, levels) = match &encoded[i] {
                 Some(e) => (e.format, e.width, e.height, e.levels),
                 None => (t.entry.format, t.entry.width as u32, t.entry.height as u32, t.entry.levels as u32),
             };
-            if fmt::layout(format).is_none() || width.min(height) / 2 < cfg.min_size {
+            if fmt::layout(format).is_none() || width.min(height) / 2 < floor {
                 blocked.min_size += sizes[i];
                 continue;
             }
-            candidates.push(Candidate { block: i, format, width, height, levels, loss: vec![0.0] });
+            candidates.push(Candidate { block: i, format, width, height, levels, loss: vec![0.0], tier: vec![base_tier] });
         }
         // Loss of each admissible step, measured in parallel (the costly part).
         candidates.par_iter_mut().for_each(|c| {
@@ -375,21 +389,25 @@ fn plan_with(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
             let role = role_of(c.block).unwrap_or(TextureRole::Other);
             let Some(top) = reference(t, original(c.block), c.width, c.height, role) else { return };
             let alpha = top.alpha_used();
-            for k in 1..=cfg.max_steps {
-                if c.width.min(c.height) >> k < cfg.min_size {
+            for k in 1..=step_cap {
+                let side = c.width.min(c.height) >> k;
+                if side < floor {
                     break;
                 }
                 let l = quality::reduction_loss(&top, k, role, alpha);
-                if l > cfg.max_loss {
+                let past = k > cfg.max_steps || side < cfg.min_size || l > cfg.max_loss;
+                if past && !cfg.force {
                     break;
                 }
+                let tier = c.tier[k as usize - 1].max(past as u8);
                 c.loss.push(l);
+                c.tier.push(tier);
             }
         });
 
         // Greedy choice; the estimated sizes are checked against real encodings after
         // each round, and the loop goes on while the file is still above the budget.
-        for _round in 0..4 {
+        for _round in 0..6 {
             loop {
                 if physical <= cfg.budget {
                     break;
@@ -401,13 +419,15 @@ fn plan_with(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
                         let k = steps[c.block] + 1;
                         let next = *c.loss.get(k as usize)?;
                         let gain = sizes[c.block].saturating_sub(c.size(k, cfg.fix_mips)) as f64;
-                        (gain > 0.0).then(|| (ci, gain / (next - c.loss[k as usize - 1] + 0.05)))
+                        let score = gain / (next - c.loss[k as usize - 1] + 0.05);
+                        (gain > 0.0).then(|| (ci, c.tier[k as usize], score))
                     })
-                    .max_by(|a, b| a.1.total_cmp(&b.1));
-                let Some((ci, _)) = best else { break };
+                    .max_by(|a, b| b.1.cmp(&a.1).then(a.2.total_cmp(&b.2)));
+                let Some((ci, _, _)) = best else { break };
                 let c = &candidates[ci];
                 steps[c.block] += 1;
                 losses[c.block] = c.loss[steps[c.block] as usize];
+                forced[c.block] = c.tier[steps[c.block] as usize] > 0;
                 sizes[c.block] = c.size(steps[c.block], cfg.fix_mips);
                 physical = gfx::packed_size(&p.res, &sizes)?;
             }
@@ -433,9 +453,9 @@ fn plan_with(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
                 if (k as usize) + 1 < c.loss.len() {
                     continue;
                 }
-                if k >= cfg.max_steps {
+                if k >= step_cap {
                     blocked.max_steps += sizes[c.block];
-                } else if c.width.min(c.height) >> (k + 1) < cfg.min_size {
+                } else if c.width.min(c.height) >> (k + 1) < floor {
                     blocked.min_size += sizes[c.block];
                 } else {
                     blocked.loss += sizes[c.block];
@@ -466,7 +486,7 @@ fn plan_with(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
         .into_iter()
         .zip(encoded)
         .enumerate()
-        .map(|(i, ((off, users), enc))| BlockPlan { off, users, enc, steps: steps[i], loss: losses[i] })
+        .map(|(i, ((off, users), enc))| BlockPlan { off, users, enc, steps: steps[i], loss: losses[i], forced: forced[i] })
         .collect();
     Ok(FilePlan { blocks, warnings, physical_after: physical })
 }
@@ -481,7 +501,7 @@ fn describe(p: &Parsed, b: &BlockPlan) -> Option<String> {
     let t = &p.textures[b.users[0]];
     let mut s = format!("texture {} ({}) : {}", t.entry.name, t.usage.label(), enc.changes.join(", "));
     if b.steps > 0 {
-        s += &format!(" — réduction ciblée ÷{} (perte {:.1} %)", 1u32 << b.steps, b.loss);
+        s += &format!(" — réduction ciblée ÷{} (perte {:.1} %){}", 1u32 << b.steps, b.loss, if b.forced { ", forcée" } else { "" });
     }
     Some(s)
 }
@@ -581,7 +601,7 @@ pub fn preview(kind: Kind, bytes: &[u8], cfg: &Config, index: &RoleIndex) -> Res
                 let img = plan::decode_top(&m, &enc.data)?;
                 let mut desc = tex_desc(enc.width, enc.height, enc.format, enc.levels, enc.data.len());
                 if b.steps > 0 {
-                    desc += &format!(" · réduction ciblée ÷{} (perte {:.1} %)", 1u32 << b.steps, b.loss);
+                    desc += &format!(" · réduction ciblée ÷{} (perte {:.1} %){}", 1u32 << b.steps, b.loss, if b.forced { ", forcée" } else { "" });
                 }
                 (Some(preview_image(&img)), desc)
             }
@@ -603,7 +623,7 @@ mod tests {
 
     #[test]
     fn candidate_sizes_follow_halvings() {
-        let c = Candidate { block: 0, format: tf::DXT1, width: 2048, height: 2048, levels: 12, loss: vec![0.0] };
+        let c = Candidate { block: 0, format: tf::DXT1, width: 2048, height: 2048, levels: 12, loss: vec![0.0], tier: vec![0] };
         let full = c.size(0, true);
         let half = c.size(1, true);
         // DXT1 2048² full chain ≈ 2.67 Mio; one halving keeps about a quarter.

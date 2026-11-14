@@ -12,6 +12,11 @@ pub const BUDGET_MIB: &str = "budget.mib";
 pub const BUDGET_MAX_STEPS: &str = "budget.max_steps";
 pub const BUDGET_MIN_SIZE: &str = "budget.min_size";
 pub const BUDGET_MAX_LOSS: &str = "budget.max_loss_pct";
+pub const BUDGET_FORCE: &str = "budget.force";
+
+/// Floors of the forced reduction (used when the limits above do not reach the budget).
+pub const FORCE_MIN_SIZE: u32 = 64;
+pub const FORCE_MAX_STEPS: u32 = 6;
 
 /// Default largest loss accepted for a texture (Équilibré), see [`optistream_texture::quality`]:
 /// a wood floor ÷2 passes (1.5 %), a slatted wall (3.0 %) or printed text (14 %) does not.
@@ -59,10 +64,11 @@ pub fn params() -> Vec<ParamSpec> {
             help: "Écart moyen toléré entre la texture réduite et l'originale, en % de la plage noir → blanc (0 % : identique). Repères : mur de plâtre ÷2 ≈ 0,9 %, parquet ÷2 ≈ 1,5 %, lames de bois ÷2 ≈ 3 %, texte imprimé ≈ 14 %. Une texture qui perdrait plus n'est pas réduite.",
             kind: ParamKind::Float { min: 0.1, max: 10.0, step: 0.1, unit: "%" },
         },
+        flag(BUDGET_FORCE, "Forcer sous le budget", "Réduction ciblée", "Si les limites ci-dessus ne suffisent pas, la réduction continue au-delà (perte, divisions, taille minimale jusqu'à 64 px), toujours en commençant par les textures qui perdent le moins ; les textes / logos et les rôles inconnus passent en dernier. Les palettes, émissives et script_rt ne sont jamais réduites."),
     ]
 }
 
-fn preset(id: &'static str, label: &'static str, description: &'static str, budget: bool, steps: i64, min_size: i64, loss: f64) -> Preset {
+fn preset(id: &'static str, label: &'static str, description: &'static str, budget: bool, steps: i64, min_size: i64, loss: f64, force: bool) -> Preset {
     let values = Settings::default()
         .with(OPT_MIN_PHYSICAL, Value::Int(16))
         .with(TEX_CONVERT, Value::Bool(true))
@@ -72,15 +78,16 @@ fn preset(id: &'static str, label: &'static str, description: &'static str, budg
         .with(BUDGET_MIB, Value::Int(16))
         .with(BUDGET_MAX_STEPS, Value::Int(steps))
         .with(BUDGET_MIN_SIZE, Value::Int(min_size))
-        .with(BUDGET_MAX_LOSS, Value::Float(loss));
+        .with(BUDGET_MAX_LOSS, Value::Float(loss))
+        .with(BUDGET_FORCE, Value::Bool(force));
     Preset { id, label, description, values }
 }
 
 pub fn presets() -> Vec<Preset> {
     vec![
-        preset("leger", "Léger", "Textures : conversion, puissance de 2, mipmaps. Aucune réduction de taille.", false, 2, 512, DEFAULT_MAX_LOSS),
-        preset("equilibre", "Équilibré", "Comme Léger, puis réduction ciblée jusqu'à 16 Mio : 2 divisions max, jamais sous 512 px, perte faible.", true, 2, 512, DEFAULT_MAX_LOSS),
-        preset("fort", "Fort", "Réduction ciblée plus poussée : 3 divisions max, jamais sous 256 px, perte moyenne.", true, 3, 256, DEFAULT_MAX_LOSS * 2.0),
+        preset("leger", "Léger", "Textures : conversion, puissance de 2, mipmaps. Aucune réduction de taille.", false, 2, 512, DEFAULT_MAX_LOSS, false),
+        preset("equilibre", "Équilibré", "Comme Léger, puis réduction ciblée jusqu'à 16 Mio : 2 divisions max, jamais sous 512 px, perte faible.", true, 2, 512, DEFAULT_MAX_LOSS, false),
+        preset("fort", "Fort", "Réduction ciblée plus poussée (3 divisions max, 256 px, perte moyenne) ; si ça ne suffit pas, réduction forcée jusqu'à passer sous 16 Mio.", true, 3, 256, DEFAULT_MAX_LOSS * 2.0, true),
     ]
 }
 
@@ -96,6 +103,8 @@ pub struct Config {
     pub max_steps: u32,
     pub min_size: u32,
     pub max_loss: f64,
+    /// Go past the limits above (never below [`FORCE_MIN_SIZE`]) when they do not reach the budget.
+    pub force: bool,
 }
 
 impl Config {
@@ -110,6 +119,7 @@ impl Config {
             max_steps: s.int(BUDGET_MAX_STEPS, 2).clamp(1, 4) as u32,
             min_size: s.int(BUDGET_MIN_SIZE, 512).clamp(4, 4096) as u32,
             max_loss: s.float(BUDGET_MAX_LOSS, DEFAULT_MAX_LOSS).max(0.0),
+            force: s.bool(BUDGET_FORCE, false),
         }
     }
 
