@@ -51,6 +51,11 @@ pub struct TextureEntry {
 }
 
 impl TextureEntry {
+    /// Offset of the name pointer field.
+    pub fn name_ptr_field(&self) -> usize {
+        self.struct_offset + field::NAME_PTR
+    }
+
     /// Offset of the pixel data pointer field, to be patched when graphics are re-laid out.
     pub fn data_ptr_field(&self) -> usize {
         self.struct_offset + field::DATA_PTR

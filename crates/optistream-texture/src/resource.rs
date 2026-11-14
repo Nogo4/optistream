@@ -49,6 +49,8 @@ pub struct BlockUser<'a> {
     pub data_off: Option<usize>,
     /// System offset of the texture's data pointer field.
     pub ptr_field: usize,
+    /// System offset of the texture's name pointer field.
+    pub name_field: usize,
 }
 
 /// Unique pixel blocks (graphics offset → indices of the textures using them), or why the
@@ -71,7 +73,16 @@ pub fn texture_blocks(
         }
     }
     let fields: HashSet<usize> = users.iter().map(|u| u.ptr_field).collect();
-    let unknown = gfx::find_unknown_graphics_refs(res, &fields, raw);
+    // Texture names are not pointers: a name ending in "..02_a" read as 8 bytes looks like a
+    // graphics address (0x615F3230), so the name strings are skipped like raw data.
+    let mut skip = raw.to_vec();
+    for u in users {
+        if let Some((Segment::System, off)) = res.u64_at(u.name_field).ok().and_then(|p| res.resolve(p)) {
+            skip.push((off, u.name.len() + 1));
+        }
+    }
+    skip.sort_unstable();
+    let unknown = gfx::find_unknown_graphics_refs(res, &fields, &skip);
     if !unknown.is_empty() {
         let list: Vec<String> =
             unknown.iter().take(3).map(|&o| format!("0x{o:X}→0x{:X}", res.u64_at(o).unwrap_or(0))).collect();

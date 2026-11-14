@@ -598,7 +598,7 @@ fn texture_blocks(p: &Parsed) -> Result<BTreeMap<usize, Vec<usize>>, String> {
     let users: Vec<texres::BlockUser> = p
         .textures
         .iter()
-        .map(|t| texres::BlockUser { name: &t.entry.name, data_off: t.data_off, ptr_field: t.entry.data_ptr_field() })
+        .map(|t| texres::BlockUser { name: &t.entry.name, data_off: t.data_off, ptr_field: t.entry.data_ptr_field(), name_field: t.entry.name_ptr_field() })
         .collect();
     texres::texture_blocks(&p.res, &users, &texres::raw_ranges(&p.res, &p.drawables))
 }
