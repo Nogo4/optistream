@@ -234,6 +234,8 @@ pub enum FileStatus {
 #[derive(Clone, Debug, Serialize)]
 pub struct FileReport {
     pub rel: PathBuf,
+    /// Folder of the resource holding the file (see [`FileCtx::resource_dir`]).
+    pub resource: PathBuf,
     pub status: FileStatus,
     pub before: SizeInfo,
     pub after: SizeInfo,
@@ -271,25 +273,46 @@ pub struct Totals {
     pub warnings_after: usize,
 }
 
+fn add_file(t: &mut Totals, f: &FileReport) {
+    t.processed += 1;
+    match f.status {
+        FileStatus::Optimized => t.optimized += 1,
+        FileStatus::Error(_) => t.errors += 1,
+        FileStatus::Unchanged => {}
+    }
+    t.disk_before += f.before.disk;
+    t.disk_after += f.after.disk;
+    t.graphics_before += f.before.graphics;
+    t.graphics_after += f.after.graphics;
+    t.system_before += f.before.system;
+    t.system_after += f.after.system;
+    t.warnings_before += f.before.fivem_warning() as usize;
+    t.warnings_after += f.after.fivem_warning() as usize;
+}
+
 impl Report {
     pub fn totals(&self) -> Totals {
-        let mut t = Totals { processed: self.files.len(), ..Default::default() };
+        let mut t = Totals::default();
         for f in &self.files {
-            match f.status {
-                FileStatus::Optimized => t.optimized += 1,
-                FileStatus::Error(_) => t.errors += 1,
-                FileStatus::Unchanged => {}
-            }
-            t.disk_before += f.before.disk;
-            t.disk_after += f.after.disk;
-            t.graphics_before += f.before.graphics;
-            t.graphics_after += f.after.graphics;
-            t.system_before += f.before.system;
-            t.system_after += f.after.system;
-            t.warnings_before += f.before.fivem_warning() as usize;
-            t.warnings_after += f.after.fivem_warning() as usize;
+            add_file(&mut t, f);
         }
         t
+    }
+
+    /// Totals per resource (a category folder holds many), heaviest remaining warnings
+    /// first. Only the resources with at least one optimised file or warning are listed.
+    pub fn by_resource(&self) -> Vec<(PathBuf, Totals)> {
+        let mut map: std::collections::BTreeMap<&Path, Totals> = std::collections::BTreeMap::new();
+        for f in &self.files {
+            add_file(map.entry(f.resource.as_path()).or_default(), f);
+        }
+        let mut out: Vec<(PathBuf, Totals)> = map
+            .into_iter()
+            .filter(|(_, t)| t.optimized > 0 || t.warnings_before > 0 || t.errors > 0)
+            .map(|(p, t)| (p.to_path_buf(), t))
+            .collect();
+        out.sort_by(|a, b| b.1.warnings_after.cmp(&a.1.warnings_after).then(a.0.cmp(&b.0)));
+        out
     }
 
     pub fn to_text(&self) -> String {
@@ -318,6 +341,22 @@ impl Report {
             );
             for p in &self.not_written {
                 s += &format!("  {}\n", p.display());
+            }
+        }
+        let resources = self.by_resource();
+        if resources.len() > 1 || resources.first().is_some_and(|(p, _)| !p.as_os_str().is_empty()) {
+            s += "\nPar ressource (> 16 Mio avant → après, mémoire physique) :\n";
+            for (dir, r) in &resources {
+                let name = if dir.as_os_str().is_empty() { "(racine)".to_owned() } else { dir.display().to_string() };
+                s += &format!(
+                    "  {name} : {} → {}, {} → {}, {} optimisé(s){}\n",
+                    r.warnings_before,
+                    r.warnings_after,
+                    mib(r.graphics_before),
+                    mib(r.graphics_after),
+                    r.optimized,
+                    if r.errors > 0 { format!(", {} erreur(s)", r.errors) } else { String::new() }
+                );
             }
         }
         if !self.resource_issues.is_empty() {
@@ -491,6 +530,7 @@ pub fn optimize(
                             }
                             return Ok(FileReport {
                                 rel: ctx.rel.clone(),
+                                resource: ctx.resource_dir(),
                                 status: FileStatus::Error(format!("{e:#}")),
                                 before,
                                 after: before,
@@ -517,6 +557,7 @@ pub fn optimize(
                     };
                     Ok(FileReport {
                         rel: ctx.rel.clone(),
+                        resource: ctx.resource_dir(),
                         status,
                         before,
                         after,
@@ -527,6 +568,7 @@ pub fn optimize(
                 progress.step(&ctx.rel);
                 report.unwrap_or_else(|e| FileReport {
                     rel: ctx.rel.clone(),
+                    resource: ctx.resource_dir(),
                     status: FileStatus::Error(format!("{e:#}")),
                     before: SizeInfo::default(),
                     after: SizeInfo::default(),

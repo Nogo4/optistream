@@ -56,6 +56,20 @@ impl FileCtx {
         normalize_rel(&self.rel)
     }
 
+    /// Folder (relative to `root`, original case) of the resource holding this file: its
+    /// nearest ancestor with a manifest, or the root itself. A category folder such as
+    /// `[oren-mappings]` holds many resources.
+    pub fn resource_dir(&self) -> PathBuf {
+        let mut dir = self.rel.parent();
+        while let Some(d) = dir.filter(|d| !d.as_os_str().is_empty()) {
+            if MANIFESTS.iter().any(|m| self.all_files.contains(&normalize_rel(&d.join(m)))) {
+                return d.to_path_buf();
+            }
+            dir = d.parent();
+        }
+        PathBuf::new()
+    }
+
     /// Whether a file with the same stem but another extension exists next to this one.
     pub fn has_sibling_with_ext(&self, ext: &str) -> bool {
         let rel = self.rel_lower();
@@ -68,6 +82,21 @@ impl FileCtx {
 
 pub fn normalize_rel(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/").to_lowercase()
+}
+
+/// File names marking the folder of a FiveM resource.
+pub const MANIFESTS: [&str; 2] = ["fxmanifest.lua", "__resource.lua"];
+
+/// Lowercased form of [`FileCtx::resource_dir`] working on normalized paths (`""` = root).
+pub fn resource_prefix(rel_lower: &str, all_files: &HashSet<String>) -> String {
+    let mut dir = rel_lower;
+    while let Some(slash) = dir.rfind('/') {
+        dir = &dir[..slash];
+        if MANIFESTS.iter().any(|m| all_files.contains(&format!("{dir}/{m}"))) {
+            return dir.to_owned();
+        }
+    }
+    String::new()
 }
 
 /// Analysis of one file, computed without modifying anything.
