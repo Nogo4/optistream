@@ -130,6 +130,7 @@ impl Config {
         let keep_dims = Self::keeps_dims(role, skin);
         TexturePolicy {
             halve: self.halve && !keep_dims,
+            halvings: 0,
             convert_formats: self.convert_formats,
             fix_mips: self.fix_mips,
             force_pot: self.force_pot && !keep_dims,

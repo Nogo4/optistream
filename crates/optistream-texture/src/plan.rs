@@ -48,6 +48,9 @@ impl TextureRole {
 pub struct TexturePolicy {
     /// Halve both sides (after the power-of-two floor), down to 4 px.
     pub halve: bool,
+    /// Further halvings applied after `halve` (targeted reduction of a whole file to a
+    /// memory budget). Each one is skipped once the smaller side would drop under 4 px.
+    pub halvings: u32,
     /// Convert BC7, DXT3 and uncompressed colour formats (normal maps to DXT5, others to
     /// DXT1, or DXT5 when the alpha is used).
     pub convert_formats: bool,
@@ -97,7 +100,10 @@ pub fn target_dims(meta: &TextureMeta, policy: &TexturePolicy) -> (u32, u32) {
         w = pot_floor(w);
         h = pot_floor(h);
     }
-    if policy.halve && w.min(h) >= 8 {
+    for _ in 0..policy.halve as u32 + policy.halvings {
+        if w.min(h) < 8 {
+            break;
+        }
         w /= 2;
         h /= 2;
     }

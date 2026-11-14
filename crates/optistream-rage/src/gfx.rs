@@ -45,8 +45,15 @@ pub fn find_unknown_graphics_refs(
     found
 }
 
-/// Replaces the graphics segment with `blocks`, re-laid out with the tightest page layout.
-pub fn rebuild(res: &mut Resource, blocks: Vec<GfxBlock>) -> Result<()> {
+/// Declared graphics size (what FiveM reports as physical memory) that [`rebuild`] would
+/// give to blocks of these sizes.
+pub fn packed_size(res: &Resource, sizes: &[u64]) -> Result<u64> {
+    let (_, max_pages) = page_limit(res)?;
+    Ok(pages::pack(sizes, max_pages, false)?.size())
+}
+
+/// `ResourcePagesInfo` offset to update (if any) and the most graphics pages allowed.
+fn page_limit(res: &Resource) -> Result<(Option<usize>, u32)> {
     let sys_pages = res.system_flags.page_count();
     // The game fills one 8-byte slot per page in ResourcePagesInfo: never need more slots
     // than the file reserved.
@@ -64,7 +71,12 @@ pub fn rebuild(res: &mut Resource, blocks: Vec<GfxBlock>) -> Result<()> {
         ensure!(reserved >= sys_pages, "ResourcePagesInfo smaller than the system page count");
         (128 - sys_pages.min(128)).min(reserved - sys_pages)
     };
+    Ok((info, max_pages))
+}
 
+/// Replaces the graphics segment with `blocks`, re-laid out with the tightest page layout.
+pub fn rebuild(res: &mut Resource, blocks: Vec<GfxBlock>) -> Result<()> {
+    let (info, max_pages) = page_limit(res)?;
     let sizes: Vec<u64> = blocks.iter().map(|b| b.data.len() as u64).collect();
     let layout = pages::pack(&sizes, max_pages, false)?;
 

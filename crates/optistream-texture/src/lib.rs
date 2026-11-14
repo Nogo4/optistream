@@ -4,6 +4,8 @@ pub mod codec;
 pub mod format;
 pub mod ops;
 pub mod plan;
+pub mod quality;
+pub mod resource;
 
 pub use codec::Rgba8;
 pub use plan::{optimize, Encoded, TextureMeta, TexturePolicy, TextureRole};
@@ -14,7 +16,7 @@ mod tests {
     use optistream_rage::texture::format as f;
 
     fn policy(halve: bool) -> TexturePolicy {
-        TexturePolicy { halve, convert_formats: true, fix_mips: true, force_pot: true, alpha_mask: false }
+        TexturePolicy { halve, halvings: 0, convert_formats: true, fix_mips: true, force_pot: true, alpha_mask: false }
     }
 
     fn solid(w: u32, h: u32, px: [u8; 4]) -> Rgba8 {

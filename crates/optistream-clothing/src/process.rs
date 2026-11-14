@@ -10,7 +10,8 @@ use optistream_rage::drawable::{self, geom_field, ib_field, vb_field, DrawableIn
 use optistream_rage::gfx::{self, GfxBlock};
 use optistream_rage::texture::{self as rtex, format as tf, TextureEntry};
 use optistream_rage::{pages, Resource, Segment};
-use optistream_texture::format::{self as fmt, chain_size, game_chain_size};
+use optistream_texture::format::{self as fmt};
+use optistream_texture::resource as texres;
 use optistream_texture::{ops, plan, Rgba8, TextureMeta, TextureRole};
 
 use crate::config::Config;
@@ -118,13 +119,9 @@ pub fn drawable_alpha_mask(bytes: &[u8]) -> Result<bool> {
 }
 
 fn tex_item(res: &Resource, entry: TextureEntry, usage: Usage, alpha_mask: bool) -> TexItem {
-    let (data_off, data_len) = match res.resolve(entry.data_ptr) {
-        Some((Segment::Graphics, off)) => {
-            let exact = chain_size(entry.format, entry.width as u32, entry.height as u32, entry.levels.max(1) as u32);
-            let game = game_chain_size(entry.stride as u32, entry.height as u32, entry.levels as u32);
-            (Some(off), exact.max(game).min(res.graphics.len() - off))
-        }
-        _ => (None, 0),
+    let (data_off, data_len) = match texres::locate(res, &entry) {
+        Some((off, len)) => (Some(off), len),
+        None => (None, 0),
     };
     TexItem { entry, usage, alpha_mask, data_off, data_len }
 }
@@ -285,26 +282,6 @@ fn read_geometry(res: &Resource, g: &GeometryInfo) -> Result<GeomData> {
     let vertices = res.slice(vertex_ptr(g), vlen)?.to_vec();
     let indices = res.slice(g.index_ptr, ilen)?.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
     Ok(GeomData { vertices, indices })
-}
-
-/// System-segment ranges holding raw vertex/index data (not structures).
-fn raw_ranges(p: &Parsed) -> Vec<(usize, usize)> {
-    let mut out = Vec::new();
-    for d in &p.drawables {
-        for g in d.geometries() {
-            let vlen = g.vertex_count as usize * g.vertex_stride as usize;
-            for ptr in [g.vertex_ptr, g.vertex_ptr2] {
-                if let Some((Segment::System, off)) = p.res.resolve(ptr) {
-                    out.push((off, vlen));
-                }
-            }
-            if let Some((Segment::System, off)) = p.res.resolve(g.index_ptr) {
-                out.push((off, g.index_count as usize * 2));
-            }
-        }
-    }
-    out.sort_unstable();
-    out
 }
 
 /// Rewrites the index buffer of a geometry (never longer than the original one).
@@ -618,31 +595,12 @@ fn optimize_texture(t: &TexItem, original: &[u8], cfg: &Config, skin: bool, wind
 /// Unique pixel blocks (graphics offset → textures using them), or why the textures of the
 /// file cannot be rewritten.
 fn texture_blocks(p: &Parsed) -> Result<BTreeMap<usize, Vec<usize>>, String> {
-    let mut blocks: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for (i, t) in p.textures.iter().enumerate() {
-        match t.data_off {
-            Some(off) => blocks.entry(off).or_default().push(i),
-            None => return Err(format!("texture {} : données hors du segment graphique, ignorée", t.entry.name)),
-        }
-    }
-    // Graphics data is only reachable through pointers: once every pointer into the
-    // segment is a known texture data field, unreferenced bytes (extra mip levels beyond
-    // the declared count, tool padding) are dead and can be dropped.
-    let fields: HashSet<usize> = p.textures.iter().map(|t| t.entry.data_ptr_field()).collect();
-    let unknown = gfx::find_unknown_graphics_refs(&p.res, &fields, &raw_ranges(p));
-    if !unknown.is_empty() {
-        let list: Vec<String> = unknown
-            .iter()
-            .take(3)
-            .map(|&o| format!("0x{o:X}→0x{:X}", p.res.u64_at(o).unwrap_or(0)))
-            .collect();
-        return Err(format!(
-            "textures non modifiées : {} référence(s) graphique(s) inconnue(s) ({})",
-            unknown.len(),
-            list.join(", ")
-        ));
-    }
-    Ok(blocks)
+    let users: Vec<texres::BlockUser> = p
+        .textures
+        .iter()
+        .map(|t| texres::BlockUser { name: &t.entry.name, data_off: t.data_off, ptr_field: t.entry.data_ptr_field() })
+        .collect();
+    texres::texture_blocks(&p.res, &users, &texres::raw_ranges(&p.res, &p.drawables))
 }
 
 /// Whether every texture of the file can be cropped: a group is only planned when all of
