@@ -1,8 +1,13 @@
 //! Resampling and mip generation.
 
+mod coverage;
+#[cfg(test)]
+mod tests;
+
 use image::{imageops, ImageBuffer, Rgba};
 
 use crate::codec::Rgba8;
+use crate::ops::coverage::{coverage, coverage_pyramid, preserve_coverage, visible_neighbour};
 
 /// How texel values must be filtered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,33 +96,6 @@ fn unpremultiply(p: [f32; 4]) -> [f32; 4] {
     [p[0] / a, p[1] / a, p[2] / a, a]
 }
 
-/// Successive 2x2 averages of a premultiplied image, down to 1x1 (level 0 excluded).
-fn coverage_pyramid(img: &ImageF) -> Vec<ImageF> {
-    let mut levels: Vec<ImageF> = Vec::new();
-    loop {
-        let cur = levels.last().unwrap_or(img);
-        if cur.width() == 1 && cur.height() == 1 {
-            return levels;
-        }
-        // Negative CatmullRom lobes must not cancel out visible colour.
-        let mut next = half_f(cur, ColorSpace::AlphaMask);
-        next.pixels_mut().for_each(|p| p.0 = p.0.map(|v| v.max(0.0)));
-        levels.push(next);
-    }
-}
-
-/// Colour of the closest coarser level that holds visible texels above `(x, y)`.
-fn visible_neighbour(pyramid: &[ImageF], x: u32, y: u32) -> [f32; 4] {
-    for (k, level) in pyramid.iter().enumerate() {
-        let shift = k as u32 + 1;
-        let p = level.get_pixel((x >> shift).min(level.width() - 1), (y >> shift).min(level.height() - 1)).0;
-        if p[3] > 1e-6 {
-            return unpremultiply(p);
-        }
-    }
-    [0.0; 4]
-}
-
 /// Rebuilds Z from RG and renormalises every texel of a normal map.
 pub fn renormalize_normals(img: &Rgba8) -> Rgba8 {
     to_u8(&to_float(img, ColorSpace::Normal), ColorSpace::Normal)
@@ -200,50 +178,6 @@ pub fn mip_chain(top: Rgba8, levels: u32, cs: ColorSpace) -> Vec<Rgba8> {
     out
 }
 
-/// Alpha the game's cutout shaders test against (texels at or above it are drawn).
-const ALPHA_TEST: f32 = 0.5;
-
-/// Largest alpha scale tried to bring a level's coverage back up.
-const MAX_ALPHA_SCALE: f32 = 8.0;
-
-/// Share of texels whose alpha, multiplied by `scale`, passes the alpha test.
-fn coverage(alpha: impl Iterator<Item = f32>, scale: f32) -> f32 {
-    let (mut passed, mut n) = (0usize, 0usize);
-    for a in alpha {
-        passed += (a * scale >= ALPHA_TEST) as usize;
-        n += 1;
-    }
-    passed as f32 / n.max(1) as f32
-}
-
-/// Scales the alpha of `level` by the smallest factor that brings its coverage up to `target`.
-/// Never lowers it: levels that already cover enough are left as they are.
-fn preserve_coverage(level: &mut Rgba8, target: f32) {
-    let alpha = |img: &Rgba8| img.data.chunks_exact(4).map(|p| p[3] as f32 / 255.0).collect::<Vec<_>>();
-    let a = alpha(level);
-    let cov = |s: f32| coverage(a.iter().copied(), s);
-    if target <= 0.0 || cov(1.0) >= target {
-        return;
-    }
-    let (mut lo, mut hi) = (1.0f32, MAX_ALPHA_SCALE);
-    if cov(hi) < target {
-        lo = hi;
-    } else {
-        for _ in 0..24 {
-            let mid = (lo + hi) / 2.0;
-            if cov(mid) >= target {
-                hi = mid;
-            } else {
-                lo = mid;
-            }
-        }
-    }
-    let scale = if lo == MAX_ALPHA_SCALE { lo } else { hi };
-    for p in level.data.chunks_exact_mut(4) {
-        p[3] = (p[3] as f32 * scale).round().min(255.0) as u8;
-    }
-}
-
 /// Downscales for on-screen previews (nearest power of two not above `max_side`).
 pub fn preview(img: &Rgba8, max_side: u32) -> Rgba8 {
     let mut cur = img.clone();
@@ -251,119 +185,4 @@ pub fn preview(img: &Rgba8, max_side: u32) -> Rgba8 {
         cur = half(&cur, ColorSpace::Linear);
     }
     cur
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn solid(w: u32, h: u32, px: [u8; 4]) -> Rgba8 {
-        let mut img = Rgba8::new(w, h);
-        for p in img.data.chunks_exact_mut(4) {
-            p.copy_from_slice(&px);
-        }
-        img
-    }
-
-    #[test]
-    fn normal_z_is_rebuilt_from_rg() {
-        // x = 0.6, y = 0 with a stored B of 0 (z = -1): renormalising with B shrank x to 0.51.
-        let r = ((0.6f32 * 0.5 + 0.5) * 255.0).round() as i32;
-        let img = solid(4, 4, [r as u8, 128, 0, 255]);
-        let out = half(&img, ColorSpace::Normal);
-        assert!((out.data[0] as i32 - r).abs() <= 1, "R = {}", out.data[0]);
-        // Rebuilt z = 0.8, stored as 0.9 * 255.
-        assert!((out.data[2] as i32 - 230).abs() <= 1, "B = {}", out.data[2]);
-    }
-
-    #[test]
-    fn well_formed_normal_is_unchanged() {
-        // (0.6, 0, 0.8) stored with its correct Z.
-        let px = [204, 128, 230, 255];
-        let out = half(&solid(8, 8, px), ColorSpace::Normal);
-        for (a, b) in out.data[..4].iter().zip(px) {
-            assert!((*a as i32 - b as i32).abs() <= 1, "{:?}", &out.data[..4]);
-        }
-    }
-
-    #[test]
-    fn fine_dark_detail_keeps_its_brightness() {
-        // One-texel black/white checker: linear-light averaging gave 188, i.e. lighter clothes.
-        let mut img = Rgba8::new(8, 8);
-        for (i, p) in img.data.chunks_exact_mut(4).enumerate() {
-            let v = if (i % 8 + i / 8) % 2 == 0 { 0 } else { 255 };
-            p.copy_from_slice(&[v, v, v, 255]);
-        }
-        for out in [half(&img, ColorSpace::Linear), resize(&img, 4, 4, ColorSpace::Linear)] {
-            for p in out.data.chunks_exact(4) {
-                // CatmullRom lands a few levels off at the image border.
-                assert!((p[0] as i32 - 128).abs() <= 4, "{:?}", &p[..4]);
-            }
-        }
-    }
-
-    #[test]
-    fn float_mip_chain_matches_direct_average() {
-        let (w, h) = (256u32, 256u32);
-        let mut img = Rgba8::new(w, h);
-        for y in 0..h {
-            for x in 0..w {
-                let i = ((y * w + x) * 4) as usize;
-                img.data[i..i + 4].copy_from_slice(&[x as u8, y as u8, ((x + y) / 2) as u8, 255]);
-            }
-        }
-        let chain = mip_chain(img.clone(), 7, ColorSpace::Linear); // 256 .. 4
-        let last = chain.last().unwrap();
-        assert_eq!((last.width, last.height), (4, 4));
-        let block = w / 4;
-        for by in 0..4 {
-            for bx in 0..4 {
-                for c in 0..3 {
-                    let mut acc = 0f64;
-                    for y in by * block..(by + 1) * block {
-                        for x in bx * block..(bx + 1) * block {
-                            acc += img.data[((y * w + x) * 4) as usize + c] as f64;
-                        }
-                    }
-                    let direct = acc / (block * block) as f64;
-                    let got = last.data[((by * 4 + bx) * 4) as usize + c] as f64;
-                    assert!((got - direct).abs() <= 1.0, "4x4 ({bx},{by}) c{c}: {got} vs {direct}");
-                }
-            }
-        }
-    }
-
-    /// One opaque column out of four (hair strands): 25 % of the texels pass the alpha test.
-    fn strands(side: u32) -> Rgba8 {
-        let mut img = Rgba8::new(side, side);
-        for (i, p) in img.data.chunks_exact_mut(4).enumerate() {
-            let a = if i as u32 % side % 4 == 0 { 255 } else { 0 };
-            p.copy_from_slice(&[60, 40, 20, a]);
-        }
-        img
-    }
-
-    fn passing(img: &Rgba8) -> f32 {
-        coverage(img.data.chunks_exact(4).map(|p| p[3] as f32 / 255.0), 1.0)
-    }
-
-    #[test]
-    fn thin_strands_keep_their_coverage() {
-        // Box filtering alone: alpha 0.25 at level 2, nothing passes the test any more.
-        let plain = mip_chain(strands(64), 4, ColorSpace::Linear);
-        assert_eq!(passing(&plain[2]), 0.0);
-        let kept = mip_chain(strands(64), 4, ColorSpace::AlphaMask);
-        for level in &kept[1..] {
-            assert!(passing(level) >= 0.25, "{}x{}: {}", level.width, level.height, passing(level));
-        }
-        // Colour is untouched by the alpha scale.
-        assert_eq!(&kept[2].data[..3], &[60, 40, 20]);
-    }
-
-    #[test]
-    fn coverage_is_never_lowered() {
-        // A solid cutout already covers everything: alpha stays as filtered.
-        let chain = mip_chain(solid(16, 16, [10, 20, 30, 200]), 3, ColorSpace::AlphaMask);
-        assert!(chain.iter().all(|l| l.data.chunks_exact(4).all(|p| p[3] == 200)));
-    }
 }
