@@ -188,3 +188,109 @@ impl Report {
         s
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::size::tests::{mib16_pages, rsc7_header};
+    use crate::pipeline::FIVEM_WARN_BYTES;
+
+    fn size(graphics_pages: u32, disk: u64) -> SizeInfo {
+        SizeInfo { disk, ..SizeInfo::of(&rsc7_header(0, mib16_pages(graphics_pages))) }
+    }
+
+    fn file(rel: &str, resource: &str, status: FileStatus, before: SizeInfo, after: SizeInfo) -> FileReport {
+        FileReport {
+            rel: rel.into(),
+            resource: resource.into(),
+            status,
+            before,
+            after,
+            changes: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    fn report(files: Vec<FileReport>) -> Report {
+        Report {
+            method: "Test".into(),
+            source: "src".into(),
+            destination: "dst".into(),
+            in_place: false,
+            files,
+            copied_files: 2,
+            resource_issues: Vec::new(),
+            seconds: 1.0,
+            cancelled: false,
+            not_written: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn totals_sum_every_file() {
+        let r = report(vec![
+            file("a", "", FileStatus::Optimized, size(2, 100), size(1, 60)),
+            file("b", "", FileStatus::Unchanged, size(1, 10), size(1, 10)),
+            file("c", "", FileStatus::Error("x".into()), size(3, 5), size(3, 5)),
+        ]);
+        let t = r.totals();
+        assert_eq!((t.processed, t.optimized, t.errors), (3, 1, 1));
+        assert_eq!((t.disk_before, t.disk_after), (115, 75));
+        assert_eq!((t.graphics_before, t.graphics_after), (6 * FIVEM_WARN_BYTES, 5 * FIVEM_WARN_BYTES));
+        assert_eq!((t.warnings_before, t.warnings_after), (2, 1));
+    }
+
+    #[test]
+    fn by_resource_skips_quiet_resources_and_sorts_by_remaining_warnings() {
+        let r = report(vec![
+            file("q/a", "quiet", FileStatus::Unchanged, size(1, 1), size(1, 1)),
+            file("b/a", "b", FileStatus::Optimized, size(2, 1), size(1, 1)),
+            file("c/a", "c", FileStatus::Unchanged, size(2, 1), size(2, 1)),
+            file("a/a", "a", FileStatus::Error("x".into()), size(1, 1), size(1, 1)),
+        ]);
+        let names: Vec<PathBuf> = r.by_resource().into_iter().map(|(p, _)| p).collect();
+        // "c" still warns; "a" and "b" have no warning left, ordered by name.
+        assert_eq!(names, [PathBuf::from("c"), PathBuf::from("a"), PathBuf::from("b")]);
+    }
+
+    #[test]
+    fn text_summary() {
+        let mut opt = file("stream/a.ydd", "", FileStatus::Optimized, size(2, 100), size(1, 60));
+        opt.changes.push("textures réduites".into());
+        opt.warnings.push("attention".into());
+        let mut r = report(vec![
+            opt,
+            file("stream/quiet.ydd", "", FileStatus::Unchanged, size(1, 1), size(1, 1)),
+            file("stream/bad.ydd", "", FileStatus::Error("corrompu".into()), size(1, 1), size(1, 1)),
+        ]);
+        r.resource_issues.push(Issue::warning("trop de drawables"));
+        let text = r.to_text();
+        assert!(text.starts_with("OptiStream — Test\n"), "{text}");
+        assert!(text.contains("Fichiers traités : 3, optimisés : 1, erreurs : 1, autres fichiers copiés : 2"));
+        assert!(text.contains("Fichiers > 16 Mio (avertissement FiveM) : 1 → 0"));
+        assert!(text.contains("- stream/a.ydd : physique 32.0 Mio → 16.0 Mio, disque"));
+        assert!(text.contains("    · textures réduites\n    ! attention\n"));
+        assert!(text.contains("- stream/bad.ydd : ERREUR corrompu"));
+        assert!(text.contains("[Warning] trop de drawables"));
+        // Unchanged files without warnings are left out of the detail.
+        assert!(!text.contains("quiet.ydd"));
+        // Same virtual memory before and after: no virtual column.
+        assert!(!text.contains("virtuelle 0.0"));
+        // A single resource at the root: no per-resource section.
+        assert!(!text.contains("Par ressource"));
+        assert!(!text.contains("ATTENTION"));
+    }
+
+    #[test]
+    fn text_flags_incomplete_exports_and_lists_resources() {
+        let mut r = report(vec![file("res/a.ydd", "res", FileStatus::Optimized, size(2, 1), size(1, 1))]);
+        r.cancelled = true;
+        r.not_written.push("res/b.ydd".into());
+        let text = r.to_text();
+        assert!(text.contains("(annulé)"));
+        assert!(text.contains("ATTENTION : 1 fichier(s) non écrit(s)"));
+        assert!(text.contains("  res/b.ydd\n"));
+        assert!(text.contains("Par ressource"));
+        assert!(text.contains("  res : 1 → 0, 32.0 Mio → 16.0 Mio, 1 optimisé(s)\n"));
+    }
+}

@@ -58,3 +58,48 @@ pub type Selection<'a> = Option<&'a HashSet<PathBuf>>;
 pub(super) fn is_selected(only: Selection, ctx: &FileCtx) -> bool {
     only.is_none_or(|s| s.contains(&ctx.rel))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn guarded_passes_results_through() {
+        assert_eq!(guarded(|| Ok(5)).unwrap(), 5);
+        assert!(guarded(|| -> Result<()> { bail!("boom") }).is_err());
+    }
+
+    #[test]
+    fn guarded_turns_panics_into_errors() {
+        let msg = |e: anyhow::Error| e.to_string();
+        assert_eq!(msg(guarded(|| -> Result<()> { panic!("static") }).unwrap_err()), "plantage interne : static");
+        let n = 3;
+        assert_eq!(msg(guarded(|| -> Result<()> { panic!("value {n}") }).unwrap_err()), "plantage interne : value 3");
+        let e = guarded(|| -> Result<()> { std::panic::panic_any(42u8) }).unwrap_err();
+        assert_eq!(msg(e), "plantage interne : cause inconnue");
+    }
+
+    #[test]
+    fn contexts_list_every_file_sorted_with_shared_index() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("stream")).unwrap();
+        std::fs::write(dir.path().join("fxmanifest.lua"), "").unwrap();
+        std::fs::write(dir.path().join("stream").join("b.ydd"), "").unwrap();
+        std::fs::write(dir.path().join("stream").join("a.ytd"), "").unwrap();
+        let ctxs = contexts(dir.path()).unwrap();
+        let rels: Vec<String> = ctxs.iter().map(|c| c.rel_lower()).collect();
+        assert_eq!(rels, ["fxmanifest.lua", "stream/a.ytd", "stream/b.ydd"]);
+        assert!(ctxs.iter().all(|c| c.root == dir.path() && c.all_files.len() == 3));
+        assert!(ctxs[2].all_files.contains("stream/b.ydd"));
+    }
+
+    #[test]
+    fn selection() {
+        let ctx = FileCtx { root: PathBuf::new(), rel: PathBuf::from("a.ydd"), all_files: Default::default() };
+        assert!(is_selected(None, &ctx));
+        let sel: HashSet<PathBuf> = [PathBuf::from("a.ydd")].into();
+        assert!(is_selected(Some(&sel), &ctx));
+        let other: HashSet<PathBuf> = [PathBuf::from("b.ydd")].into();
+        assert!(!is_selected(Some(&other), &ctx));
+    }
+}

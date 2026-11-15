@@ -225,6 +225,66 @@ mod tests {
     }
 
     #[test]
+    fn roles_by_name_suffix() {
+        for n in ["brick_n", "brick_nm", "wall_normal", "floor_bump", "tile_nrm2"] {
+            assert_eq!(usage_from_name(n), Usage::Role(TextureRole::Normal), "{n}");
+        }
+        for n in ["brick_s", "metal_spec"] {
+            assert_eq!(usage_from_name(n), Usage::Role(TextureRole::Specular), "{n}");
+        }
+        for n in ["concrete", "brick_d"] {
+            assert_eq!(usage_from_name(n), Usage::Role(TextureRole::Diffuse), "{n}");
+        }
+        assert_eq!(usage_from_name("script_rt_tv"), Usage::Protected);
+    }
+
+    #[test]
+    fn lookup_shapes() {
+        use optistream_rage::texture::format as tf;
+        assert!(is_lookup_shaped(256, 1, tf::A8R8G8B8));
+        assert!(is_lookup_shaped(16, 512, tf::L8));
+        // Square, wide enough, or block-compressed: an ordinary image.
+        assert!(!is_lookup_shaped(16, 16, tf::A8R8G8B8));
+        assert!(!is_lookup_shaped(256, 17, tf::A8R8G8B8));
+        assert!(!is_lookup_shaped(256, 4, tf::DXT1));
+    }
+
+    fn shader(name: &str, textures: &[(&str, &str)]) -> ShaderInfo {
+        ShaderInfo { name_hash: joaat(name), file_hash: 0, textures: textures.iter().map(|(s, t)| (joaat(s), (*t).into())).collect() }
+    }
+
+    #[test]
+    fn index_from_shaders() {
+        let mut idx = RoleIndex::default();
+        idx.add_shaders(&[
+            shader("default", &[("DiffuseSampler", "Wall"), ("BumpSampler", "wall_n"), ("DetailSampler", "detail"), ("SpecSampler", "")]),
+            shader("emissive", &[("DiffuseSampler", "neon_sign")]),
+            shader("default", &[("TintPaletteSampler", "pal")]),
+        ]);
+        assert_eq!(idx.get("wall"), Some(Usage::Role(TextureRole::Diffuse)));
+        assert_eq!(idx.get("wall_n"), Some(Usage::Role(TextureRole::Normal)));
+        assert_eq!(idx.get("detail"), Some(Usage::Role(TextureRole::Other)));
+        assert_eq!(idx.get("neon_sign"), Some(Usage::Protected));
+        assert_eq!(idx.get("pal"), Some(Usage::Protected));
+        // Empty texture names are skipped.
+        assert_eq!(idx.len(), 5);
+        assert_eq!(idx.get(""), None);
+    }
+
+    #[test]
+    fn merge_keeps_the_strongest_usage() {
+        let mut a = RoleIndex::default();
+        a.add_shaders(&[shader("default", &[("DiffuseSampler", "x"), ("BumpSampler", "y")])]);
+        let mut b = RoleIndex::default();
+        b.add_shaders(&[shader("default", &[("SpecSampler", "x"), ("DiffuseSampler", "y"), ("DiffuseSampler", "z")])]);
+        a.merge(&b);
+        assert_eq!(a.get("x"), Some(Usage::Role(TextureRole::Specular)));
+        assert_eq!(a.get("y"), Some(Usage::Role(TextureRole::Normal)));
+        assert_eq!(a.get("z"), Some(Usage::Role(TextureRole::Diffuse)));
+        assert_eq!(a.len(), 3);
+    }
+
+    #[test]
     fn known_sampler_hashes() {
         // Same hashes as observed in the clothing files (DiffuseSampler / BumpSampler / SpecSampler).
         assert_eq!(sampler_usage(4_059_966_321), Usage::Role(TextureRole::Diffuse));

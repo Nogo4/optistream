@@ -34,3 +34,21 @@ impl Progress {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fraction_and_step() {
+        let p = Progress::default();
+        assert_eq!(p.fraction(), 0.0);
+        p.total.store(4, Ordering::Relaxed);
+        p.step(Path::new("a.ydd"));
+        assert_eq!(p.fraction(), 0.25);
+        assert_eq!(*p.current.lock().unwrap(), "a.ydd");
+        assert!(!p.is_cancelled());
+        p.cancel.store(true, Ordering::Relaxed);
+        assert!(p.is_cancelled());
+    }
+}

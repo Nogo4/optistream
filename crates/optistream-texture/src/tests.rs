@@ -310,3 +310,42 @@ fn halving_keeps_the_format() {
     let enc = optimize(&meta, &data, TextureRole::Diffuse, &policy(true)).unwrap().unwrap();
     assert_eq!((enc.width, enc.format), (32, f::DXT5));
 }
+
+#[test]
+fn target_dims_floor_to_power_of_two_then_halve() {
+    let meta = |w, h| TextureMeta { width: w, height: h, format: f::DXT1, levels: 1 };
+    let pol = |force_pot, halve, halvings| TexturePolicy { force_pot, halve, halvings, ..policy(false) };
+    assert_eq!(plan::target_dims(&meta(300, 200), &pol(true, false, 0)), (256, 128));
+    assert_eq!(plan::target_dims(&meta(300, 200), &pol(false, false, 0)), (300, 200));
+    assert_eq!(plan::target_dims(&meta(1024, 512), &pol(true, true, 2)), (128, 64));
+    assert_eq!(plan::target_dims(&meta(1, 1), &pol(true, false, 0)), (1, 1));
+}
+
+#[test]
+fn target_dims_never_halve_under_4_px() {
+    let meta = TextureMeta { width: 64, height: 8, format: f::DXT1, levels: 1 };
+    let pol = TexturePolicy { halve: true, halvings: 10, ..policy(false) };
+    assert_eq!(plan::target_dims(&meta, &pol), (32, 4));
+}
+
+#[test]
+fn optimised_texture_is_stable() {
+    // Running the optimisation again on its own output changes nothing.
+    let meta = TextureMeta { width: 300, height: 200, format: f::A8R8G8B8, levels: 1 };
+    let data = gradient(300, 200, false);
+    let first = optimize(&meta, &data, TextureRole::Diffuse, &policy(false)).unwrap().expect("npot RGBA is converted");
+    let meta2 = TextureMeta { width: first.width, height: first.height, format: first.format, levels: first.levels };
+    assert!(optimize(&meta2, &first.data, TextureRole::Diffuse, &policy(false)).unwrap().is_none());
+}
+
+#[test]
+fn halving_policy_shrinks_every_role() {
+    for role in [TextureRole::Diffuse, TextureRole::Normal, TextureRole::Specular, TextureRole::Other] {
+        let (meta, data) = encoded_chain(f::DXT5, solid(128, 128, [128, 128, 255, 255]));
+        let enc = optimize(&meta, &data, role, &policy(true)).unwrap().expect("halved");
+        assert_eq!((enc.width, enc.height), (64, 64), "{role:?}");
+        assert_eq!(enc.levels, format::full_levels(64, 64));
+        assert_eq!(enc.data.len(), format::chain_size(enc.format, 64, 64, enc.levels));
+        assert_eq!(enc.stride, format::stride(enc.format, 64, 64));
+    }
+}

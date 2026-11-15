@@ -306,3 +306,169 @@ pub fn apply(res: &mut Resource, drawables: &[DrawableInfo], plan: &GeoPlan) -> 
     }
     sys::rebuild(res, &raw)
 }
+
+#[cfg(test)]
+mod tests {
+    use optistream_core::{Settings, Value};
+    use optistream_rage::drawable::VertexDecl;
+
+    use super::*;
+    use crate::config::{presets, GEO_HIGH_FLOOR};
+
+    fn cfg_with_floor(pct: i64) -> Config {
+        Config::from_settings(&Settings::default().with(GEO_HIGH_FLOOR, Value::Int(pct)))
+    }
+
+    /// Geometry with float3 positions, its own buffers and the given triangle count.
+    fn geometry(offset: usize, triangles: u32) -> GeometryInfo {
+        GeometryInfo {
+            offset,
+            vb_offset: offset + 1,
+            ib_offset: offset + 2,
+            decl: VertexDecl { flags: 1 << semantic::POSITION, stride: 12, count: 1, types: component::FLOAT3 as u64 },
+            shader_index: Some(0),
+            vertex_stride: 12,
+            vertex_count: triangles * 3,
+            vertex_ptr: 0x5000_0000 + offset as u64,
+            vertex_ptr2: 0,
+            index_ptr: 0x5100_0000 + offset as u64,
+            index_count: triangles * 3,
+        }
+    }
+
+    fn drawable(offset: usize, lods: [Vec<GeometryInfo>; 4]) -> DrawableInfo {
+        DrawableInfo { offset, hash: 0, has_skeleton: false, shaders: Vec::new(), texture_dict: None, lods }
+    }
+
+    fn entries(geoms: &[GeometryInfo]) -> Vec<(usize, usize, GeometryInfo)> {
+        geoms.iter().map(|g| (0, 0, g.clone())).collect()
+    }
+
+    #[test]
+    fn far_lods_are_reduced_before_the_high_lod() {
+        for p in presets() {
+            let s = steps(&Config::from_settings(&p.values));
+            let first_high = s.iter().position(|&(lod, _)| lod == 0).unwrap_or(s.len());
+            assert!(s[..first_high].iter().all(|&(lod, _)| (1..=3).contains(&lod)), "{}", p.id);
+            assert!(s[first_high..].iter().all(|&(lod, _)| lod == 0), "{}", p.id);
+            // Each LOD only goes down from one step to the next.
+            for lod in 0..4 {
+                let shares: Vec<f64> = s.iter().filter(|&&(l, _)| l == lod).map(|&(_, r)| r).collect();
+                assert!(shares.windows(2).all(|w| w[1] < w[0]), "{} lod {lod}: {shares:?}", p.id);
+                assert!(shares.iter().all(|&r| r > 0.0 && r < 1.0), "{} lod {lod}", p.id);
+            }
+            // The least visible LOD (VLow) is the first one touched.
+            assert_eq!(s[0].0, 3);
+        }
+    }
+
+    #[test]
+    fn high_lod_steps_stop_at_the_floor() {
+        for (pct, count) in [(100, 0), (95, 0), (90, 1), (80, 2), (60, 4), (50, 5)] {
+            let cfg = cfg_with_floor(pct);
+            let high: Vec<f64> = steps(&cfg).into_iter().filter(|&(l, _)| l == 0).map(|(_, r)| r).collect();
+            assert_eq!(high.len(), count, "floor {pct} %: {high:?}");
+            assert!(high.iter().all(|&r| r + 1e-9 >= cfg.geo_high_floor), "floor {pct} %: {high:?}");
+            if let Some(&last) = high.last() {
+                assert!((last - cfg.geo_high_floor).abs() < 1e-6, "floor {pct} %: last {last}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_lower_high_floor_only_adds_steps() {
+        // A stronger preset tries the same steps first, then more of the High LOD.
+        let strict = steps(&cfg_with_floor(80));
+        let loose = steps(&cfg_with_floor(60));
+        assert!(loose.len() > strict.len());
+        for (a, b) in strict.iter().zip(&loose) {
+            assert_eq!(a.0, b.0);
+            assert!((a.1 - b.1).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn thousands_are_grouped() {
+        assert_eq!(group(0), "0");
+        assert_eq!(group(999), "999");
+        assert_eq!(group(1000), "1 000");
+        assert_eq!(group(100_000), "100 000");
+        assert_eq!(group(1_234_567), "1 234 567");
+        assert_eq!(group(u64::MAX), "18 446 744 073 709 551 615");
+    }
+
+    #[test]
+    fn geometries_are_listed_once_in_first_seen_order() {
+        let a = geometry(100, 10);
+        let b = geometry(200, 10);
+        let c = geometry(300, 10);
+        // `a` is referenced by two LODs of the first drawable and by the second drawable.
+        let ds = [
+            drawable(0, [vec![a.clone(), b.clone()], vec![a.clone()], Vec::new(), Vec::new()]),
+            drawable(1, [vec![a.clone()], Vec::new(), vec![c.clone()], Vec::new()]),
+        ];
+        let got: Vec<(usize, usize, usize)> = geometries(&ds).into_iter().map(|(d, l, g)| (d, l, g.offset)).collect();
+        assert_eq!(got, [(0, 0, 100), (0, 0, 200), (1, 2, 300)]);
+        assert!(geometries(&[]).is_empty());
+    }
+
+    #[test]
+    fn buffers_used_twice_are_shared() {
+        let a = geometry(100, 100);
+        let mut b = geometry(200, 100);
+        let c = geometry(300, 100);
+        let mut d = geometry(400, 100);
+        b.vb_offset = a.vb_offset;
+        d.index_ptr = c.index_ptr;
+        let shared = shared_buffers(&entries(&[a.clone(), b, c.clone(), d]));
+        assert_eq!(shared.vertex, [a.vb_offset].into_iter().collect());
+        assert_eq!(shared.index, [c.index_ptr].into_iter().collect());
+
+        let none = shared_buffers(&entries(&[geometry(100, 100), geometry(200, 100)]));
+        assert!(none.vertex.is_empty() && none.index.is_empty());
+    }
+
+    #[test]
+    fn only_plain_unshared_meshes_are_decimable() {
+        let no_share = Shared { vertex: HashSet::new(), index: HashSet::new() };
+        assert!(decimable(&geometry(0, 64), &no_share));
+        // Too small to be worth it.
+        assert!(!decimable(&geometry(0, 63), &no_share));
+        // Cloth is simulated vertex by vertex.
+        let mut cloth = geometry(0, 1000);
+        cloth.decl.flags |= 0x8000_0000;
+        assert!(!decimable(&cloth, &no_share));
+        // No position, or positions not stored as float3.
+        let mut no_pos = geometry(0, 1000);
+        no_pos.decl.flags = 1 << semantic::NORMAL;
+        assert!(!decimable(&no_pos, &no_share));
+        let mut half = geometry(0, 1000);
+        half.decl.types = component::FLOAT4 as u64;
+        assert!(!decimable(&half, &no_share));
+        // Shared vertex or index data.
+        let g = geometry(0, 1000);
+        let by_vb = Shared { vertex: [g.vb_offset].into_iter().collect(), index: HashSet::new() };
+        assert!(!decimable(&g, &by_vb));
+        let by_ib = Shared { vertex: HashSet::new(), index: [g.index_ptr].into_iter().collect() };
+        assert!(!decimable(&g, &by_ib));
+    }
+
+    #[test]
+    fn plan_does_nothing_when_disabled_or_under_budget() {
+        let res = Resource {
+            version: 162,
+            system_flags: optistream_rage::rsc7::PageFlags::from_counts(11, [2, 0, 0, 0, 0], 0),
+            graphics_flags: optistream_rage::rsc7::PageFlags(0),
+            system: Vec::new(),
+            graphics: Vec::new(),
+        };
+        let mut cfg = presets().into_iter().find(|p| p.id == "equilibre").map(|p| Config::from_settings(&p.values)).unwrap();
+        // 32 MiB declared against a 64 MiB budget: under it.
+        cfg.budget = 64 * 1024 * 1024;
+        assert!(plan(&res, &[], &cfg).unwrap().is_none());
+        // Above the budget but the reduction is off.
+        cfg.budget = 16 * 1024 * 1024;
+        cfg.geo_enabled = false;
+        assert!(plan(&res, &[], &cfg).unwrap().is_none());
+    }
+}

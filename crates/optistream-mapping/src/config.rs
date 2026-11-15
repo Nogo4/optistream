@@ -142,3 +142,116 @@ impl Config {
             && optistream_rage::rsc7::PageFlags(u32::from_le_bytes(bytes[12..16].try_into().unwrap())).size() <= self.min_physical
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use optistream_rage::rsc7::PageFlags;
+
+    const MIB: u64 = 1024 * 1024;
+
+    fn preset_cfg(id: &str) -> Config {
+        Config::from_settings(&presets().into_iter().find(|p| p.id == id).unwrap().values)
+    }
+
+    /// 16-byte RSC7 header declaring `graphics_mib` MiB of physical memory (multiple of 16).
+    fn header(graphics_mib: u32) -> Vec<u8> {
+        // Base shift 11: base page = 0x2000 << 11 = 16 MiB.
+        let mut b = vec![0u8; 16];
+        b[12..16].copy_from_slice(&PageFlags::from_counts(11, [graphics_mib / 16, 0, 0, 0, 0], 0).0.to_le_bytes());
+        b
+    }
+
+    #[test]
+    fn every_preset_sets_every_param_within_its_range() {
+        let specs = params();
+        for p in presets() {
+            for spec in &specs {
+                let v = p.values.0.get(spec.key).unwrap_or_else(|| panic!("{}: {} missing", p.id, spec.key));
+                match (&spec.kind, v) {
+                    (ParamKind::Bool, Value::Bool(_)) => {}
+                    (ParamKind::Int { min, max, .. }, Value::Int(x)) => assert!((min..=max).contains(&x), "{}: {}", p.id, spec.key),
+                    (ParamKind::Float { min, max, .. }, Value::Float(x)) => assert!(*x >= *min && *x <= *max, "{}: {}", p.id, spec.key),
+                    (ParamKind::Choice(c), Value::Int(x)) => assert!(c.iter().any(|(k, _)| k == x), "{}: {}", p.id, spec.key),
+                    (k, v) => panic!("{}: {} has {v:?} for {k:?}", p.id, spec.key),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_preset_parses_to_a_valid_config() {
+        for p in presets() {
+            let c = Config::from_settings(&p.values);
+            assert_eq!((c.budget, c.min_physical), (16 * MIB, 16 * MIB), "{}", p.id);
+            assert!((1..=4).contains(&c.max_steps), "{}", p.id);
+            assert!(c.min_size >= 128, "{}", p.id);
+            assert!(c.max_loss > 0.0, "{}", p.id);
+            // Forcing always goes further than the limits of the preset.
+            assert!(FORCE_MAX_STEPS >= c.max_steps && FORCE_MIN_SIZE <= c.min_size, "{}", p.id);
+        }
+    }
+
+    #[test]
+    fn presets_get_stronger_in_order() {
+        let ids: Vec<&str> = presets().iter().map(|p| p.id).collect();
+        assert_eq!(ids, ["leger", "equilibre", "fort"]);
+        let (l, e, f) = (preset_cfg("leger"), preset_cfg("equilibre"), preset_cfg("fort"));
+        assert!(!l.budget_enabled && !l.force);
+        for (weak, strong) in [(&l, &e), (&e, &f)] {
+            assert!(strong.budget_enabled >= weak.budget_enabled);
+            assert!(strong.force >= weak.force);
+            assert!(strong.max_steps >= weak.max_steps);
+            assert!(strong.min_size <= weak.min_size);
+            assert!(strong.max_loss >= weak.max_loss);
+        }
+        assert_eq!(e.max_loss, DEFAULT_MAX_LOSS);
+    }
+
+    #[test]
+    fn empty_settings_give_the_defaults() {
+        let c = Config::from_settings(&Settings::default());
+        assert_eq!((c.min_physical, c.budget), (16 * MIB, 16 * MIB));
+        assert!(c.convert_formats && c.fix_mips && c.force_pot && c.budget_enabled && !c.force);
+        assert_eq!((c.max_steps, c.min_size), (2, 512));
+        assert_eq!(c.max_loss, DEFAULT_MAX_LOSS);
+    }
+
+    #[test]
+    fn out_of_range_values_are_clamped() {
+        let s = |pairs: &[(&str, Value)]| pairs.iter().fold(Settings::default(), |s, (k, v)| s.with(k, *v));
+        let low = Config::from_settings(&s(&[
+            (OPT_MIN_PHYSICAL, Value::Int(-1)),
+            (BUDGET_MIB, Value::Int(0)),
+            (BUDGET_MAX_STEPS, Value::Int(-2)),
+            (BUDGET_MIN_SIZE, Value::Int(0)),
+            (BUDGET_MAX_LOSS, Value::Float(-0.5)),
+        ]));
+        assert_eq!((low.min_physical, low.budget), (0, MIB));
+        assert_eq!((low.max_steps, low.min_size), (1, 4));
+        assert_eq!(low.max_loss, 0.0);
+        let high = Config::from_settings(&s(&[(BUDGET_MAX_STEPS, Value::Int(10)), (BUDGET_MIN_SIZE, Value::Int(65_536))]));
+        assert_eq!((high.max_steps, high.min_size), (4, 4096));
+        // An integer given for a float parameter still counts.
+        assert_eq!(Config::from_settings(&s(&[(BUDGET_MAX_LOSS, Value::Int(5))])).max_loss, 5.0);
+    }
+
+    #[test]
+    fn texture_policy_keeps_the_corrections_and_adds_halvings() {
+        let mut c = preset_cfg("fort");
+        c.convert_formats = false;
+        let p = c.texture_policy(3);
+        assert_eq!(p.halvings, 3);
+        assert!(!p.halve && !p.alpha_mask && !p.convert_formats && p.fix_mips && p.force_pot);
+    }
+
+    #[test]
+    fn min_physical_threshold() {
+        let mut c = preset_cfg("equilibre");
+        assert!(c.below_min_physical(&header(16)));
+        assert!(!c.below_min_physical(&header(32)));
+        assert!(!c.below_min_physical(&header(16)[..15]));
+        c.min_physical = 0;
+        assert!(!c.below_min_physical(&header(0)));
+    }
+}

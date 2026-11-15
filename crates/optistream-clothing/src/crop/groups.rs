@@ -106,3 +106,121 @@ pub fn plan_for(root: &Path, files: &HashSet<String>, rel: &str) -> Option<Arc<G
     let m = groups.remove(&main)?;
     plan_group(root, &m).ok().flatten().map(Arc::new)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn set(files: &[&str]) -> HashSet<String> {
+        files.iter().map(|f| f.to_string()).collect()
+    }
+
+    fn sorted(mut v: Vec<String>) -> Vec<String> {
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn path_helpers_split_and_join_on_the_last_slash() {
+        assert_eq!(dir_of("a/b/jbib_000_u.ydd"), "a/b");
+        assert_eq!(name_of("a/b/jbib_000_u.ydd"), "jbib_000_u.ydd");
+        assert_eq!(dir_of("jbib_000_u.ydd"), "");
+        assert_eq!(name_of("jbib_000_u.ydd"), "jbib_000_u.ydd");
+        assert_eq!(join("", "x.ydd"), "x.ydd");
+        assert_eq!(join("a/b", "x.ydd"), "a/b/x.ydd");
+        for rel in ["a/b/x.ydd", "x.ydd"] {
+            assert_eq!(join(dir_of(rel), name_of(rel)), rel);
+        }
+    }
+
+    #[test]
+    fn drawable_of_finds_the_drawable_in_the_same_folder_only() {
+        let files = set(&["m^jbib_048_u.ydd", "s/m^lowr_003_r.ydd", "props/p_head_010.ydd"]);
+        assert_eq!(drawable_of("m^jbib_diff_048_a_uni.ytd", &files).as_deref(), Some("m^jbib_048_u.ydd"));
+        assert_eq!(drawable_of("s/m^lowr_diff_003_b_whi.ytd", &files).as_deref(), Some("s/m^lowr_003_r.ydd"));
+        assert_eq!(drawable_of("props/p_head_diff_010_c.ytd", &files).as_deref(), Some("props/p_head_010.ydd"));
+        // Same name, other folder or other index: not this drawable.
+        assert_eq!(drawable_of("other/m^jbib_diff_048_a_uni.ytd", &files), None);
+        assert_eq!(drawable_of("m^jbib_diff_049_a_uni.ytd", &files), None);
+        // Not a variation at all.
+        assert_eq!(drawable_of("m^jbib_048_u.ytd", &files), None);
+    }
+
+    #[test]
+    fn drawable_of_prefers_the_universal_drawable() {
+        let files = set(&["jbib_001_u.ydd", "jbib_001_r.ydd", "jbib_001.ydd"]);
+        assert_eq!(drawable_of("jbib_diff_001_a_uni.ytd", &files).as_deref(), Some("jbib_001_u.ydd"));
+    }
+
+    #[test]
+    fn find_groups_gathers_a_drawable_its_first_person_model_and_variations() {
+        let files = set(&[
+            "c/m^jbib_000_u.ydd",
+            "c/m^jbib_000_u_1.ydd",
+            "c/m^jbib_diff_000_a_uni.ytd",
+            "c/m^jbib_diff_000_b_uni.ytd",
+            // Embedded-style dictionary sharing the drawable name: not a variation.
+            "c/m^jbib_000_u.ytd",
+            // Variation of a drawable that does not exist.
+            "c/m^jbib_diff_007_a_uni.ytd",
+            "c/m^lowr_001_u.ydd",
+        ]);
+        let g = find_groups(&files);
+        assert_eq!(sorted(g.keys().cloned().collect()), ["c/m^jbib_000_u.ydd", "c/m^lowr_001_u.ydd"]);
+        let m = &g["c/m^jbib_000_u.ydd"];
+        assert_eq!(m.ydds, ["c/m^jbib_000_u.ydd", "c/m^jbib_000_u_1.ydd"]);
+        assert_eq!(sorted(m.ytds.clone()), ["c/m^jbib_diff_000_a_uni.ytd", "c/m^jbib_diff_000_b_uni.ytd"]);
+        let lowr = &g["c/m^lowr_001_u.ydd"];
+        assert_eq!(lowr.ydds, ["c/m^lowr_001_u.ydd"]);
+        assert!(lowr.ytds.is_empty());
+    }
+
+    #[test]
+    fn find_groups_skips_skin_cloth_and_first_person_only_pieces() {
+        let files = set(&[
+            // Skin-dependent: its variations are not attached anywhere else.
+            "uppr_001_r.ydd",
+            "uppr_diff_001_a_whi.ytd",
+            // Cloth piece.
+            "jbib_002_u.ydd",
+            "jbib_002_u.yld",
+            // First-person model with cloth: the whole group is refused.
+            "jbib_003_u.ydd",
+            "jbib_003_u_1.ydd",
+            "jbib_003_u_1.yld",
+            // A lone first-person model never leads a group.
+            "jbib_004_u_1.ydd",
+        ]);
+        assert!(find_groups(&files).is_empty());
+    }
+
+    #[test]
+    fn find_groups_handles_props_and_root_level_files() {
+        let files = set(&["p_head_005.ydd", "p_head_diff_005_a.ytd", "p_head_diff_005_b.ytd", "p_eyes_diff_005_a.ytd"]);
+        let g = find_groups(&files);
+        assert_eq!(g.len(), 1);
+        assert_eq!(sorted(g["p_head_005.ydd"].ytds.clone()), ["p_head_diff_005_a.ytd", "p_head_diff_005_b.ytd"]);
+    }
+
+    #[test]
+    fn every_file_belongs_to_at_most_one_group() {
+        let files = set(&[
+            "a/jbib_000_u.ydd",
+            "a/jbib_000_u_1.ydd",
+            "a/jbib_diff_000_a_uni.ytd",
+            "b/jbib_000_u.ydd",
+            "b/jbib_diff_000_a_uni.ytd",
+            "a/jbib_001_u.ydd",
+            "a/jbib_diff_001_a_uni.ytd",
+        ]);
+        let g = find_groups(&files);
+        assert_eq!(g.len(), 3);
+        let mut all: Vec<&String> = g.values().flat_map(|m| m.ydds.iter().chain(&m.ytds)).collect();
+        let n = all.len();
+        all.sort();
+        all.dedup();
+        assert_eq!(all.len(), n);
+        assert_eq!(n, files.len());
+        assert_eq!(g["b/jbib_000_u.ydd"].ytds, ["b/jbib_diff_000_a_uni.ytd"]);
+    }
+}

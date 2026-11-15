@@ -201,3 +201,128 @@ pub trait Method: Send + Sync {
             .unwrap_or_default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx(rel: &Path, files: &[&str]) -> FileCtx {
+        FileCtx {
+            root: PathBuf::from("root"),
+            rel: rel.to_path_buf(),
+            all_files: Arc::new(files.iter().map(|f| f.to_string()).collect()),
+        }
+    }
+
+    #[test]
+    fn normalize_rel_lowercases_and_uses_forward_slashes() {
+        assert_eq!(normalize_rel(Path::new("Stream\\Sub/A.YDD")), "stream/sub/a.ydd");
+        assert_eq!(normalize_rel(&Path::new("Cat").join("Res").join("X.ytd")), "cat/res/x.ytd");
+    }
+
+    #[test]
+    fn file_name_and_rel_are_lowercased() {
+        let c = ctx(&Path::new("Stream").join("Hat_000_U.YDD"), &[]);
+        assert_eq!(c.file_name_lower(), "hat_000_u.ydd");
+        assert_eq!(c.rel_lower(), "stream/hat_000_u.ydd");
+    }
+
+    #[test]
+    fn resource_dir_is_the_nearest_folder_with_a_manifest() {
+        let files = ["[cat]/res1/fxmanifest.lua", "[cat]/res2/__resource.lua"];
+        let rel = Path::new("[Cat]").join("Res1").join("stream").join("a.ydd");
+        assert_eq!(ctx(&rel, &files).resource_dir(), Path::new("[Cat]").join("Res1"));
+        let rel = Path::new("[cat]").join("res2").join("a.ydd");
+        assert_eq!(ctx(&rel, &files).resource_dir(), Path::new("[cat]").join("res2"));
+    }
+
+    #[test]
+    fn resource_dir_defaults_to_the_root() {
+        let rel = Path::new("stream").join("a.ydd");
+        assert_eq!(ctx(&rel, &["fxmanifest.lua"]).resource_dir(), PathBuf::new());
+        assert_eq!(ctx(Path::new("a.ydd"), &[]).resource_dir(), PathBuf::new());
+    }
+
+    #[test]
+    fn resource_prefix_matches_resource_dir() {
+        let files: HashSet<String> = ["[cat]/res1/fxmanifest.lua".to_owned()].into();
+        assert_eq!(resource_prefix("[cat]/res1/stream/a.ydd", &files), "[cat]/res1");
+        assert_eq!(resource_prefix("[cat]/other/a.ydd", &files), "");
+        assert_eq!(resource_prefix("a.ydd", &files), "");
+    }
+
+    #[test]
+    fn sibling_with_another_extension() {
+        let files = ["stream/a.ydd", "stream/a.ytd", "stream/noext"];
+        let c = ctx(&Path::new("stream").join("A.YDD"), &files);
+        assert!(c.has_sibling_with_ext("ytd"));
+        assert!(!c.has_sibling_with_ext("yft"));
+        assert!(!ctx(&Path::new("stream").join("noext"), &files).has_sibling_with_ext("ytd"));
+    }
+
+    #[test]
+    fn severities_are_ordered() {
+        assert!(Severity::Info < Severity::Warning && Severity::Warning < Severity::Error);
+        assert_eq!(Issue::warning("w").severity, Severity::Warning);
+        assert_eq!(Issue::error(String::from("e")).text, "e");
+    }
+
+    #[test]
+    fn preview_mesh_triangles() {
+        let m = PreviewMesh { positions: vec![[0.0; 3]; 4], indices: vec![0, 1, 2, 2, 1, 3, 0] };
+        assert_eq!(m.triangles(), 2);
+    }
+
+    struct Presets(&'static str);
+
+    impl Method for Presets {
+        fn id(&self) -> &'static str {
+            "p"
+        }
+        fn label(&self) -> &'static str {
+            "P"
+        }
+        fn description(&self) -> &'static str {
+            ""
+        }
+        fn params(&self) -> Vec<ParamSpec> {
+            Vec::new()
+        }
+        fn presets(&self) -> Vec<Preset> {
+            ["low", "high"]
+                .into_iter()
+                .enumerate()
+                .map(|(i, id)| Preset {
+                    id,
+                    label: id,
+                    description: "",
+                    values: Settings::default().with("level", crate::Value::Int(i as i64)),
+                })
+                .collect()
+        }
+        fn default_preset(&self) -> &'static str {
+            self.0
+        }
+        fn handles(&self, _: &FileCtx) -> bool {
+            false
+        }
+        fn analyze_file(&self, _: &FileCtx, _: &[u8], _: &Settings) -> Result<FileAnalysis> {
+            unreachable!()
+        }
+        fn optimize_file(&self, _: &FileCtx, _: &[u8], _: &Settings) -> Result<FileOutcome> {
+            unreachable!()
+        }
+        fn resource_checks(&self, _: &[FileCtx]) -> Vec<Issue> {
+            Vec::new()
+        }
+        fn preview(&self, _: &FileCtx, _: &[u8], _: &Settings) -> Result<Vec<PreviewItem>> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn default_settings_come_from_the_default_preset() {
+        assert_eq!(Presets("high").default_settings().int("level", -1), 1);
+        assert_eq!(Presets("missing").default_settings(), Settings::default());
+    }
+}

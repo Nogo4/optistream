@@ -152,6 +152,36 @@ mod tests {
         assert!(!light_or_glass_by_name("hustler_belt_d"));
     }
 
+    fn shader(name: &str, textures: &[(&str, &str)]) -> ShaderInfo {
+        ShaderInfo { name_hash: joaat(name), file_hash: 0, textures: textures.iter().map(|(s, t)| (joaat(s), (*t).into())).collect() }
+    }
+
+    #[test]
+    fn emissive_shaders_and_plate_fonts_are_protected() {
+        use optistream_texture::TextureRole;
+        let lights = shader("vehicle_lightsemissive", &[]);
+        assert_eq!(sampler_usage_vehicle(&lights, joaat("DiffuseSampler")), Usage::Protected);
+        let by_file = ShaderInfo { name_hash: 0, file_hash: joaat("vehicle_dash_emissive.sps"), textures: Vec::new() };
+        assert_eq!(sampler_usage_vehicle(&by_file, joaat("DiffuseSampler")), Usage::Protected);
+        let paint = shader("vehicle_paint1", &[]);
+        assert_eq!(sampler_usage_vehicle(&paint, joaat("FontSampler")), Usage::Protected);
+        assert_eq!(sampler_usage_vehicle(&paint, joaat("BumpSampler")), Usage::Role(TextureRole::Normal));
+        assert_eq!(sampler_usage_vehicle(&paint, joaat("DirtSampler")), Usage::Role(TextureRole::Other));
+    }
+
+    #[test]
+    fn index_collects_liveries_and_merges() {
+        let mut a = VehicleIndex::default();
+        a.add_shaders(&[shader("vehicle_paint3", &[("DiffuseSampler2", "Carter_Sign_1"), ("DiffuseSampler", "carter_body"), ("DiffuseSampler2", "")])]);
+        assert_eq!(a.liveries, ["carter_sign_1".to_owned()].into_iter().collect());
+        let mut b = VehicleIndex::default();
+        b.add_shaders(&[shader("vehicle_lightsemissive", &[("DiffuseSampler", "carter_body"), ("DiffuseSampler2", "carter_sign_2")])]);
+        a.merge(&b);
+        assert_eq!(a.liveries.len(), 2);
+        // The protected usage of the emissive shader wins over the plain diffuse one.
+        assert_eq!(a.roles.get("CARTER_BODY"), Some(Usage::Protected));
+    }
+
     #[test]
     fn known_vehicle_samplers() {
         // Hashes observed in carter.yft and onx_ambjog_liv_lsfd1.yft.

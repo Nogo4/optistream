@@ -68,6 +68,60 @@ fn only_small_uniform_textures_are_exempt() {
 }
 
 #[test]
+fn axis_invariants_hold_over_a_sweep() {
+    let sizes = [(4u32, 4u32), (8, 8), (16, 64), (256, 1024), (512, 512), (1024, 4096), (4096, 4096)];
+    for (min_n, max_n) in sizes {
+        let margin = (2.0 / min_n as f64).max(8.0 / max_n as f64);
+        for i in 0..40 {
+            for len in [0.0, 0.01, 0.05, 0.2, 0.45, 0.8] {
+                let lo = i as f64 / 40.0;
+                let hi = (lo + len).min(1.0);
+                let a = axis(lo, hi, min_n, max_n);
+                let ctx = format!("{lo}..{hi} on {min_n}/{max_n}: {a:?}");
+                // Inside the texture, a power-of-two fraction of the axis.
+                assert!(a.start >= 0.0 && a.start + a.size <= 1.0 + 1e-12, "{ctx}");
+                assert_eq!((1.0 / a.size).log2().fract(), 0.0, "{ctx}");
+                // Holds the used range and its filtering margin (clamped to the texture).
+                assert!(a.start <= (lo - margin).max(0.0) + 1e-9, "{ctx}");
+                assert!(a.start + a.size >= (hi + margin).min(1.0) - 1e-9, "{ctx}");
+                // Never thinner than one 4x4 block of the smallest texture, and block aligned.
+                assert!(a.size * min_n as f64 >= 4.0 - 1e-9, "{ctx}");
+                assert_eq!((a.start * min_n as f64).round() as u32 % 4, 0, "{ctx}");
+            }
+        }
+    }
+}
+
+#[test]
+fn axis_picks_the_smallest_fitting_size() {
+    // A tiny used range in the middle of a big texture gets a small window...
+    let a = axis(0.50, 0.51, 4096, 4096);
+    assert!(a.size <= 1.0 / 32.0, "{a:?}");
+    // ...and halving it again would no longer hold the range and its margin.
+    let margin = 8.0 / 4096.0;
+    assert!(a.size / 2.0 < 0.01 + 2.0 * margin);
+    // Textures of a single block cannot be cut.
+    assert_eq!(axis(0.4, 0.45, 4, 4), Axis::FULL);
+}
+
+#[test]
+fn window_area_rect_and_mapping_are_consistent() {
+    let full = Window { u: Axis::FULL, v: Axis::FULL };
+    assert_eq!(full.area(), 1.0);
+    assert_eq!(full.rect(512, 256), (0, 0, 512, 256));
+    assert_eq!(full.map([0.3, 0.7]), [0.3, 0.7]);
+
+    let w = Window { u: Axis { start: 0.5, size: 0.25 }, v: Axis { start: 0.0, size: 0.5 } };
+    assert_eq!(w.area(), 0.125);
+    // Non-square texture: each axis scales with its own side.
+    assert_eq!(w.rect(1024, 256), (512, 0, 256, 128));
+    // The window corners map to the corners of the cropped texture.
+    assert_eq!(w.map([0.5, 0.0]), [0.0, 0.0]);
+    assert_eq!(w.map([0.75, 0.5]), [1.0, 1.0]);
+    assert_eq!(w.describe(), "25 % × 50 % de la feuille");
+}
+
+#[test]
 fn half_round_trip() {
     for x in [0.0f32, 0.25, 0.5, 0.999, 1.0, -0.3, 2.5] {
         assert!((half_to_f32(f32_to_half(x)) - x).abs() < 1e-3, "{x}");

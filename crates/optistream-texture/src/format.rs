@@ -90,3 +90,79 @@ pub fn full_levels(width: u32, height: u32) -> u32 {
 pub fn is_pot(v: u32) -> bool {
     v.is_power_of_two()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn block_formats_round_up_to_whole_blocks() {
+        assert_eq!(level_size(f::DXT1, 4, 4), 8);
+        assert_eq!(level_size(f::DXT1, 1, 1), 8);
+        assert_eq!(level_size(f::DXT1, 5, 4), 16);
+        assert_eq!(level_size(f::DXT5, 8, 8), 64);
+        assert_eq!(level_size(f::BC7, 2, 2), 16);
+    }
+
+    #[test]
+    fn pixel_formats_use_bytes_per_pixel() {
+        assert_eq!(level_size(f::A8R8G8B8, 3, 5), 60);
+        assert_eq!(level_size(f::A16B16G16R16, 2, 2), 32);
+        assert_eq!(level_size(f::A1R5G5B5, 2, 2), 8);
+        assert_eq!(level_size(f::L8, 7, 3), 21);
+        // A zero side counts as one pixel.
+        assert_eq!(level_size(f::A8, 0, 0), 1);
+    }
+
+    #[test]
+    fn unknown_formats_have_no_layout() {
+        assert_eq!(layout(0x1234), None);
+        assert_eq!(level_size(0x1234, 64, 64), 0);
+        assert_eq!(name(0x1234), "0x00001234");
+        assert_eq!(name(f::DXT5), "DXT5");
+    }
+
+    #[test]
+    fn mip_dimensions_stop_at_one_pixel() {
+        assert_eq!(level_dims(256, 64, 0), (256, 64));
+        assert_eq!(level_dims(256, 64, 3), (32, 8));
+        assert_eq!(level_dims(256, 64, 7), (2, 1));
+        assert_eq!(level_dims(256, 64, 20), (1, 1));
+    }
+
+    #[test]
+    fn chain_size_sums_levels() {
+        assert_eq!(chain_size(f::DXT1, 16, 16, 1), 128);
+        // 16² + 8² + 4² DXT1 blocks.
+        assert_eq!(chain_size(f::DXT1, 16, 16, 3), 128 + 32 + 8);
+        assert_eq!(chain_size(f::DXT1, 16, 16, 0), 0);
+    }
+
+    #[test]
+    fn vanilla_chains_stop_at_4_px() {
+        assert_eq!(full_levels(2048, 2048), 10);
+        assert_eq!(full_levels(512, 128), 6);
+        assert_eq!(full_levels(4, 4), 1);
+        assert_eq!(full_levels(2, 256), 1);
+        // The last level of a full chain is 4 px on its smaller side.
+        let n = full_levels(1024, 256);
+        assert_eq!(level_dims(1024, 256, n - 1).1, 4);
+    }
+
+    #[test]
+    fn stride_and_game_chain_size_agree_with_exact_sizes_on_pot_textures() {
+        assert_eq!(stride(f::DXT1, 256, 256), 128);
+        assert_eq!(stride(f::A8R8G8B8, 100, 10), 400);
+        let levels = full_levels(256, 256);
+        let s = stride(f::DXT1, 256, 256) as u32;
+        assert_eq!(game_chain_size(s, 256, levels), chain_size(f::DXT1, 256, 256, levels));
+        // Zero levels still count the top level.
+        assert_eq!(game_chain_size(s, 256, 0), chain_size(f::DXT1, 256, 256, 1));
+    }
+
+    #[test]
+    fn powers_of_two() {
+        assert!(is_pot(1) && is_pot(4096));
+        assert!(!is_pot(0) && !is_pot(300));
+    }
+}

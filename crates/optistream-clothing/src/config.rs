@@ -158,3 +158,139 @@ impl Config {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use optistream_rage::rsc7::PageFlags;
+
+    use super::*;
+
+    const MIB: u64 = 1024 * 1024;
+
+    fn preset_config(id: &str) -> Config {
+        let p = presets().into_iter().find(|p| p.id == id).unwrap();
+        Config::from_settings(&p.values)
+    }
+
+    /// RSC7 header whose graphics flags (physical memory) declare `flags`.
+    fn header(flags: PageFlags) -> Vec<u8> {
+        let mut b = vec![0u8; 16];
+        b[12..16].copy_from_slice(&flags.0.to_le_bytes());
+        b
+    }
+
+    #[test]
+    fn empty_settings_give_the_documented_defaults() {
+        let c = Config::from_settings(&Settings::default());
+        assert!(!c.only_3d && !c.halve);
+        assert!(c.crop_uv && c.convert_formats && c.fix_mips && c.force_pot);
+        assert!(c.mesh_enabled && c.reorder && c.lower_lods);
+        assert_eq!(c.min_physical, 16 * MIB);
+        assert_eq!((c.budget_large, c.budget_small), (40_000, 10_000));
+        assert!((c.max_error - 0.005).abs() < 1e-9);
+    }
+
+    #[test]
+    fn out_of_range_values_are_clamped_and_types_coerced() {
+        let s = Settings::default()
+            .with(OPT_MIN_PHYSICAL, Value::Int(-5))
+            .with(MESH_BUDGET_LARGE, Value::Int(0))
+            .with(MESH_BUDGET_SMALL, Value::Int(-100))
+            .with(MESH_MAX_ERROR, Value::Int(2));
+        let c = Config::from_settings(&s);
+        assert_eq!(c.min_physical, 0);
+        // A zero budget would ask for an empty mesh: at least one triangle.
+        assert_eq!((c.budget_large, c.budget_small), (1, 1));
+        // Integer percentage read as a float, then turned into a fraction.
+        assert!((c.max_error - 0.02).abs() < 1e-9);
+        // Float given for an integer parameter: truncated.
+        let c = Config::from_settings(&Settings::default().with(OPT_MIN_PHYSICAL, Value::Float(20.9)));
+        assert_eq!(c.min_physical, 20 * MIB);
+        // Wrong type for a flag: the default is kept.
+        let c = Config::from_settings(&Settings::default().with(TEX_CROP, Value::Int(0)));
+        assert!(c.crop_uv);
+    }
+
+    #[test]
+    fn presets_set_every_parameter_within_its_range() {
+        let keys: BTreeSet<&str> = params().iter().map(|p| p.key).collect();
+        for p in presets() {
+            let set: BTreeSet<&str> = p.values.0.keys().map(String::as_str).collect();
+            assert_eq!(set, keys, "{}", p.id);
+            for spec in params() {
+                let v = p.values.get(spec.key).unwrap();
+                match (spec.kind, v) {
+                    (ParamKind::Bool, Value::Bool(_)) => {}
+                    (ParamKind::Int { min, max, .. }, Value::Int(x)) => assert!((min..=max).contains(&x), "{} {}", p.id, spec.key),
+                    (ParamKind::Float { min, max, .. }, Value::Float(x)) => assert!(x >= min && x <= max, "{} {}", p.id, spec.key),
+                    (k, v) => panic!("{} {}: {v:?} for {k:?}", p.id, spec.key),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn presets_get_stronger_in_order() {
+        let ids: Vec<&str> = presets().iter().map(|p| p.id).collect();
+        assert_eq!(ids, ["leger", "equilibre", "fort"]);
+        let [l, e, f] = ["leger", "equilibre", "fort"].map(preset_config);
+        assert!(l.budget_large > e.budget_large && e.budget_large > f.budget_large);
+        assert!(l.budget_small > e.budget_small && e.budget_small > f.budget_small);
+        assert!(l.max_error < e.max_error && e.max_error < f.max_error);
+        assert!(!l.crop_uv && e.crop_uv && f.crop_uv);
+        assert!(!l.halve && !e.halve && f.halve);
+        // Small pieces always get a smaller budget than large ones.
+        for c in [&l, &e, &f] {
+            assert!(c.budget_small < c.budget_large);
+        }
+    }
+
+    #[test]
+    fn skin_diffuses_keep_their_dimensions() {
+        let c = Config { halve: true, force_pot: true, ..Config::from_settings(&Settings::default()) };
+        for role in [TextureRole::Diffuse, TextureRole::Other] {
+            assert!(Config::keeps_dims(role, true));
+            assert!(!Config::keeps_dims(role, false));
+            let p = c.texture_policy(role, true, true);
+            assert!(!p.halve && !p.force_pot && !p.alpha_mask);
+            // Format conversion and mips never change the dimensions: still applied.
+            assert!(p.convert_formats && p.fix_mips);
+        }
+        // Normal and specular maps of a skin drawable are not tied to the MP skin.
+        for role in [TextureRole::Normal, TextureRole::Specular] {
+            assert!(!Config::keeps_dims(role, true));
+            let p = c.texture_policy(role, true, false);
+            assert!(p.halve && p.force_pot);
+        }
+        let p = c.texture_policy(TextureRole::Diffuse, false, true);
+        assert!(p.halve && p.force_pot && p.alpha_mask);
+        assert_eq!(p.halvings, 0);
+    }
+
+    #[test]
+    fn min_physical_threshold_is_inclusive() {
+        let c = Config::from_settings(&Settings::default());
+        // Base page 2 MiB (0x2000 << 8).
+        assert!(c.below_min_physical(&header(PageFlags::from_counts(8, [8, 0, 0, 0, 0], 0))));
+        assert!(c.below_min_physical(&header(PageFlags::from_counts(8, [1, 0, 0, 0, 0], 0))));
+        assert!(!c.below_min_physical(&header(PageFlags::from_counts(8, [9, 0, 0, 0, 0], 0))));
+        // A header too short to read is never skipped.
+        assert!(!c.below_min_physical(&[0u8; 15]));
+        // Threshold 0: every file is processed.
+        let all = Config::from_settings(&Settings::default().with(OPT_MIN_PHYSICAL, Value::Int(0)));
+        assert!(!all.below_min_physical(&header(PageFlags(0))));
+    }
+
+    #[test]
+    fn slot_budgets() {
+        let c = Config::from_settings(&Settings::default());
+        for slot in ["uppr", "lowr", "jbib", "accs", "task", "hair", "feet", "berd"] {
+            assert_eq!(c.budget_for_slot(slot), 40_000, "{slot}");
+        }
+        for slot in ["hand", "teef", "decl", "p_head", "p_eyes", ""] {
+            assert_eq!(c.budget_for_slot(slot), 10_000, "{slot}");
+        }
+    }
+}

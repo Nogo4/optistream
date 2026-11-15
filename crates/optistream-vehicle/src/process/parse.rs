@@ -110,3 +110,57 @@ pub fn ytd_names(bytes: &[u8]) -> Result<HashSet<String>> {
     let res = Resource::parse(bytes)?;
     Ok(rtex::read_dictionary(&res, 0)?.into_iter().map(|e| e.name.to_ascii_lowercase()).collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use optistream_rage::drawable::ShaderInfo;
+    use optistream_rage::joaat::joaat;
+    use optistream_rage::texture::format as tf;
+
+    use super::*;
+
+    fn entry(name: &str, width: u16, height: u16, format: u32) -> TextureEntry {
+        TextureEntry { struct_offset: 0, name: name.into(), width, height, depth: 1, stride: width, format, levels: 1, data_ptr: 0 }
+    }
+
+    const DIFFUSE: Usage = Usage::Role(TextureRole::Diffuse);
+
+    #[test]
+    fn class_follows_the_design_order() {
+        let body = entry("body_d", 2048, 2048, tf::DXT5);
+        // A +hi copy wins over everything, even a light or a livery.
+        assert_eq!(class(&entry("tfstanier_lights", 2048, 2048, tf::DXT5), DIFFUSE, true, true), Class::HiCopy);
+        // Then lights / glass by name, and unknown roles.
+        assert_eq!(class(&entry("tfstanier_lights", 2048, 2048, tf::DXT5), DIFFUSE, true, false), Class::Last);
+        assert_eq!(class(&body, Usage::Role(TextureRole::Other), true, false), Class::Last);
+        // Then liveries, whatever their size.
+        assert_eq!(class(&entry("x_sign_1", 512, 512, tf::DXT5), DIFFUSE, true, false), Class::Livery);
+        assert_eq!(class(&body, DIFFUSE, false, false), Class::Big);
+        assert_eq!(class(&entry("belt_d", 512, 512, tf::DXT5), DIFFUSE, false, false), Class::Small);
+    }
+
+    #[test]
+    fn big_is_decided_by_the_smaller_side() {
+        assert_eq!(class(&entry("strip_d", 4096, 512, tf::DXT5), DIFFUSE, false, false), Class::Small);
+        assert_eq!(class(&entry("sheet_d", 1024, 2048, tf::DXT5), DIFFUSE, false, false), Class::Big);
+        assert_eq!(class(&entry("sheet_d", 1023, 4096, tf::DXT5), DIFFUSE, false, false), Class::Small);
+    }
+
+    #[test]
+    fn usage_prefers_own_shaders_then_resource_then_shape_then_name() {
+        let shader = |sampler: &str, name: &str| ShaderInfo { name_hash: 0, file_hash: 0, textures: vec![(joaat(sampler), name.into())] };
+        let mut own = VehicleIndex::default();
+        own.add_shaders(&[shader("BumpSampler", "Body_D")]);
+        let mut resource = VehicleIndex::default();
+        resource.add_shaders(&[shader("SpecSampler", "body_d"), shader("SpecSampler", "seat_d")]);
+
+        let body = entry("body_d", 1024, 1024, tf::DXT5);
+        assert_eq!(usage(&body, Some(&own), &resource), Usage::Role(TextureRole::Normal));
+        assert_eq!(usage(&body, None, &resource), Usage::Role(TextureRole::Specular));
+        assert_eq!(usage(&entry("seat_d", 512, 512, tf::DXT5), Some(&own), &resource), Usage::Role(TextureRole::Specular));
+        // Unknown to every shader: an uncompressed strip is a lookup table, else the name decides.
+        let empty = VehicleIndex::default();
+        assert_eq!(usage(&entry("ramp", 256, 4, tf::A8R8G8B8), None, &empty), Usage::Protected);
+        assert_eq!(usage(&entry("SEAT NM", 512, 512, tf::DXT5), None, &empty), Usage::Role(TextureRole::Normal));
+    }
+}

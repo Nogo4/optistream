@@ -193,3 +193,158 @@ impl Config {
         flags(12) <= self.min_physical && (!self.geo_enabled || flags(8) <= self.min_physical)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use optistream_rage::rsc7::PageFlags;
+
+    const MIB: u64 = 1024 * 1024;
+
+    fn preset_cfg(id: &str) -> Config {
+        Config::from_settings(&presets().into_iter().find(|p| p.id == id).unwrap().values)
+    }
+
+    /// 16-byte RSC7 header with the given declared system (virtual) and graphics (physical) sizes.
+    fn header(system_mib: u32, graphics_mib: u32) -> Vec<u8> {
+        // Base shift 11: base page = 0x2000 << 11 = 16 MiB.
+        let flags = |mib: u32| PageFlags::from_counts(11, [mib, 0, 0, 0, 0], 0).0;
+        let mut b = vec![0u8; 16];
+        b[8..12].copy_from_slice(&flags(system_mib).to_le_bytes());
+        b[12..16].copy_from_slice(&flags(graphics_mib).to_le_bytes());
+        b
+    }
+
+    #[test]
+    fn every_preset_sets_every_param_within_its_range() {
+        let specs = params();
+        for p in presets() {
+            for spec in &specs {
+                let v = p.values.0.get(spec.key).unwrap_or_else(|| panic!("{}: {} missing", p.id, spec.key));
+                match (&spec.kind, v) {
+                    (ParamKind::Bool, Value::Bool(_)) => {}
+                    (ParamKind::Int { min, max, .. }, Value::Int(x)) => assert!((min..=max).contains(&x), "{}: {}", p.id, spec.key),
+                    (ParamKind::Float { min, max, .. }, Value::Float(x)) => assert!(*x >= *min && *x <= *max, "{}: {}", p.id, spec.key),
+                    (ParamKind::Choice(c), Value::Int(x)) => assert!(c.iter().any(|(k, _)| k == x), "{}: {}", p.id, spec.key),
+                    (k, v) => panic!("{}: {} has {v:?} for {k:?}", p.id, spec.key),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_preset_parses_to_a_valid_config() {
+        for p in presets() {
+            let c = Config::from_settings(&p.values);
+            assert_eq!(c.budget, 16 * MIB, "{}", p.id);
+            assert_eq!(c.min_physical, 16 * MIB, "{}", p.id);
+            assert!((1..=3).contains(&c.max_steps), "{}", p.id);
+            assert!(c.min_size >= 4, "{}", p.id);
+            assert!(c.max_loss > 0.0, "{}", p.id);
+            assert!((0.5..=1.0).contains(&c.geo_high_floor), "{}", p.id);
+            assert!(c.geo_high_error > 0.0 && c.geo_high_error <= 0.1, "{}", p.id);
+        }
+    }
+
+    #[test]
+    fn presets_get_stronger_in_order() {
+        let ids: Vec<&str> = presets().iter().map(|p| p.id).collect();
+        assert_eq!(ids, ["leger", "equilibre", "fort"]);
+        let (l, e, f) = (preset_cfg("leger"), preset_cfg("equilibre"), preset_cfg("fort"));
+        // Léger only corrects: no size or geometry reduction.
+        assert!(!l.budget_enabled && !l.geo_enabled && !l.force && !l.small);
+        for (weak, strong) in [(&l, &e), (&e, &f)] {
+            assert!(strong.budget_enabled >= weak.budget_enabled);
+            assert!(strong.small >= weak.small);
+            assert!(strong.force >= weak.force);
+            assert!(strong.geo_enabled >= weak.geo_enabled);
+            assert!(strong.max_steps >= weak.max_steps);
+            assert!(strong.min_size <= weak.min_size);
+            assert!(strong.max_loss >= weak.max_loss);
+        }
+        // Geometry: a stronger preset keeps less of the High LOD and tolerates more error.
+        assert!(f.geo_high_floor < e.geo_high_floor);
+        assert!(f.geo_high_error > e.geo_high_error);
+    }
+
+    #[test]
+    fn empty_settings_give_the_defaults() {
+        let c = Config::from_settings(&Settings::default());
+        assert_eq!(c.min_physical, 16 * MIB);
+        assert!(c.convert_formats && c.fix_mips && c.force_pot && c.budget_enabled);
+        assert_eq!(c.budget, 16 * MIB);
+        assert!(!c.small && !c.force && !c.geo_enabled);
+        assert_eq!((c.max_steps, c.min_size), (1, 256));
+        assert_eq!(c.max_loss, 3.0);
+        assert!((c.geo_high_floor - 0.8).abs() < 1e-12);
+        assert!((c.geo_high_error - 0.005).abs() < 1e-7);
+    }
+
+    #[test]
+    fn out_of_range_values_are_clamped() {
+        let s = |pairs: &[(&str, Value)]| pairs.iter().fold(Settings::default(), |s, (k, v)| s.with(k, *v));
+        let low = Config::from_settings(&s(&[
+            (OPT_MIN_PHYSICAL, Value::Int(-8)),
+            (BUDGET_MIB, Value::Int(-3)),
+            (BUDGET_MAX_STEPS, Value::Int(0)),
+            (BUDGET_MIN_SIZE, Value::Int(1)),
+            (BUDGET_MAX_LOSS, Value::Float(-5.0)),
+            (GEO_HIGH_FLOOR, Value::Int(10)),
+            (GEO_HIGH_ERROR, Value::Float(-1.0)),
+        ]));
+        assert_eq!(low.min_physical, 0);
+        assert_eq!(low.budget, MIB);
+        assert_eq!(low.max_steps, 1);
+        assert_eq!(low.min_size, 4);
+        assert_eq!(low.max_loss, 0.0);
+        assert_eq!(low.geo_high_floor, 0.5);
+        assert_eq!(low.geo_high_error, 0.0);
+
+        let high = Config::from_settings(&s(&[
+            (BUDGET_MAX_STEPS, Value::Int(99)),
+            (BUDGET_MIN_SIZE, Value::Int(100_000)),
+            (GEO_HIGH_FLOOR, Value::Int(250)),
+            (GEO_HIGH_ERROR, Value::Float(50.0)),
+        ]));
+        assert_eq!(high.max_steps, 3);
+        assert_eq!(high.min_size, 4096);
+        assert_eq!(high.geo_high_floor, 1.0);
+        assert!((high.geo_high_error - 0.1).abs() < 1e-7);
+    }
+
+    #[test]
+    fn limits_mirror_the_config_with_vehicle_force_floors() {
+        for p in presets() {
+            let c = Config::from_settings(&p.values);
+            let l = c.limits();
+            assert_eq!((l.enabled, l.budget, l.max_loss, l.force), (c.budget_enabled, c.budget, c.max_loss, c.force), "{}", p.id);
+            assert_eq!((l.force_min_size, l.force_max_steps), (FORCE_MIN_SIZE, FORCE_MAX_STEPS));
+            // Forcing never goes under what the limits already allow.
+            assert!(l.force_max_steps >= c.max_steps && l.force_min_size <= c.min_size, "{}", p.id);
+            assert_eq!(l.policy.halvings, 0);
+            assert!(!l.policy.halve && !l.policy.alpha_mask);
+            assert_eq!(l.texture_policy(2).halvings, 2);
+        }
+        // Liveries keep a floor above the forced floor, and count as big.
+        const { assert!(LIVERY_FLOOR >= FORCE_MIN_SIZE && LIVERY_FLOOR >= BIG_SIDE) };
+    }
+
+    #[test]
+    fn min_physical_threshold_checks_both_segments_with_geometry() {
+        let mut c = preset_cfg("equilibre");
+        assert!(c.geo_enabled);
+        // Both segments at the 16 MiB threshold: skipped.
+        assert!(c.below_min_physical(&header(1, 1)));
+        // Virtual memory above: the geometry reduction has work, not skipped.
+        assert!(!c.below_min_physical(&header(2, 1)));
+        // Physical memory above: never skipped.
+        assert!(!c.below_min_physical(&header(1, 2)));
+        // Without the geometry reduction, only the physical memory counts.
+        c.geo_enabled = false;
+        assert!(c.below_min_physical(&header(2, 1)));
+        // Threshold 0 or a truncated header: always processed.
+        assert!(!c.below_min_physical(&header(1, 1)[..15]));
+        c.min_physical = 0;
+        assert!(!c.below_min_physical(&header(0, 0)));
+    }
+}

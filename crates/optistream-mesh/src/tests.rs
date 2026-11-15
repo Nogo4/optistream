@@ -287,3 +287,155 @@ fn fold_line_is_kept() {
         assert!(!(back && front_off_fold), "{t:?}");
     }
 }
+
+/// Asserts the structural invariants of a decimation result: indices in range, no
+/// degenerate triangle, every output vertex used and numbered in first-use order.
+fn assert_compact(d: &Decimated, stride: usize) {
+    let vcount = d.vertex_count(stride);
+    assert_eq!(d.vertices.len() % stride, 0);
+    assert_eq!(d.indices.len() % 3, 0);
+    assert!(d.indices.iter().all(|&i| (i as usize) < vcount));
+    assert!(d.indices.as_chunks::<3>().0.iter().all(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2]));
+    let mut next = 0u16;
+    for &i in &d.indices {
+        assert!(i <= next, "vertex {i} used before {next}");
+        if i == next {
+            next += 1;
+        }
+    }
+    assert_eq!(next as usize, vcount, "unused vertices left in the buffer");
+}
+
+#[test]
+fn build_locks_is_empty_without_positions_or_attributes() {
+    // No position: nothing can be compared.
+    let decl = VertexDecl {
+        flags: 1 << semantic::TEXCOORD0,
+        stride: 8,
+        count: 1,
+        types: (component::FLOAT2 as u64) << (semantic::TEXCOORD0 * 4),
+    };
+    let v = vec![0u8; 3 * 8];
+    let geom = GeometryData { decl, stride: 8, vertices: &v, indices: &[0, 1, 2] };
+    assert!(build_locks(&geom, &[0, 1, 2]).iter().all(|&l| l == SimplifyVertex::None));
+    // Position only: coincident vertices cannot differ in a locked attribute.
+    let decl = VertexDecl { flags: 1, stride: 12, count: 1, types: component::FLOAT3 as u64 };
+    let mut v = Vec::new();
+    push_f32s(&mut v, &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    let geom = GeometryData { decl, stride: 12, vertices: &v, indices: &[0, 1, 2] };
+    let locks = build_locks(&geom, &[0, 1, 2]);
+    assert_eq!(locks.len(), 3);
+    assert!(locks.iter().all(|&l| l == SimplifyVertex::None));
+}
+
+#[test]
+fn coincident_vertices_with_identical_attributes_are_not_protected() {
+    let mut v = grid_at(2, 0.0);
+    // Exact copy of the centre vertex (same position and UV): no discontinuity.
+    let copy = v[4 * 20..5 * 20].to_vec();
+    v.extend(copy);
+    // A copy of a corner with another UV: a seam.
+    let mut seam = v[0..20].to_vec();
+    seam[12..16].copy_from_slice(&0.5f32.to_le_bytes());
+    v.extend(seam);
+    let idx = grid_indices(2, 0);
+    let geom = GeometryData { decl: decl_pos_uv(), stride: 20, vertices: &v, indices: &idx };
+    let locks = build_locks(&geom, &idx.iter().map(|&i| i as u32).collect::<Vec<_>>());
+    assert!(!locks[4].contains(SimplifyVertex::Protect));
+    assert!(!locks[9].contains(SimplifyVertex::Protect));
+    assert!(locks[0].contains(SimplifyVertex::Protect));
+    assert!(locks[10].contains(SimplifyVertex::Protect));
+    // A single bone everywhere would add no priority either: there is no skin here.
+    assert!(locks.iter().all(|l| !l.contains(SimplifyVertex::Priority)));
+}
+
+#[test]
+fn decimate_skips_unreachable_or_negligible_targets() {
+    let (decl, v, idx) = grid(32);
+    let geom = GeometryData { decl, stride: 20, vertices: &v, indices: &idx };
+    let tris = idx.len() / 3;
+    // Already within the budget.
+    assert!(decimate(&geom, tris, 1.0, false).unwrap().is_none());
+    assert!(decimate(&geom, tris + 100, 1.0, false).unwrap().is_none());
+    // Less than 5 % of the triangles would go: not worth rewriting the geometry.
+    assert!(decimate(&geom, tris - 1, 1.0, false).unwrap().is_none());
+}
+
+#[test]
+fn decimate_needs_float3_positions_and_valid_indices() {
+    let (_, v, idx) = grid(4);
+    // Same bytes declared as Float4 positions: positions cannot be read, nothing done.
+    let decl = VertexDecl { flags: 1, stride: 20, count: 1, types: component::FLOAT4 as u64 };
+    let geom = GeometryData { decl, stride: 20, vertices: &v, indices: &idx };
+    assert!(decimate(&geom, 4, 1.0, false).unwrap().is_none());
+    // An index past the vertex buffer is an error, not a silent skip.
+    let mut bad = idx.clone();
+    bad[5] = 25;
+    let geom = GeometryData { decl: decl_pos_uv(), stride: 20, vertices: &v, indices: &bad };
+    assert!(decimate(&geom, 4, 1.0, false).is_err());
+}
+
+#[test]
+fn decimate_reaches_the_target_when_the_error_allows_it() {
+    let (decl, v, idx) = grid(32);
+    let geom = GeometryData { decl, stride: 20, vertices: &v, indices: &idx };
+    for (target, order_sensitive) in [(500, false), (500, true), (300, false)] {
+        let d = decimate(&geom, target, 1.0, order_sensitive).unwrap().unwrap();
+        assert!(d.indices.len() / 3 <= target, "{} > {target}", d.indices.len() / 3);
+        assert!(d.error >= 0.0 && d.error <= 1.0);
+        assert_compact(&d, 20);
+    }
+}
+
+#[test]
+fn stricter_error_bound_keeps_more_triangles() {
+    // Bumpy grid: every collapse moves the surface.
+    let n = 24;
+    let mut v = Vec::new();
+    for y in 0..=n {
+        for x in 0..=n {
+            let (fx, fy) = (x as f32 / n as f32, y as f32 / n as f32);
+            let z = ((x * 7 + y * 13) % 5) as f32 * 0.02;
+            push_f32s(&mut v, &[fx, fy, z, fx, fy]);
+        }
+    }
+    let idx = grid_indices(n, 0);
+    let geom = GeometryData { decl: decl_pos_uv(), stride: 20, vertices: &v, indices: &idx };
+    let tris = |e: f32| decimate(&geom, 10, e, false).unwrap().map_or(idx.len() / 3, |d| d.indices.len() / 3);
+    let (strict, loose) = (tris(1e-4), tris(0.5));
+    assert!(strict > loose, "{strict} <= {loose}");
+    let d = decimate(&geom, 10, 0.5, false).unwrap().unwrap();
+    assert!(d.indices.len() < idx.len());
+    assert_compact(&d, 20);
+}
+
+#[test]
+fn triangle_soup_is_welded_before_simplification() {
+    // Every triangle has its own 3 vertices; copies only differ by their tangent (export
+    // noise), which the weld ignores.
+    let decl = VertexDecl {
+        flags: (1 << semantic::POSITION) | (1 << semantic::TEXCOORD0) | (1 << semantic::TANGENT),
+        stride: 36,
+        count: 3,
+        types: (component::FLOAT3 as u64)
+            | ((component::FLOAT2 as u64) << (semantic::TEXCOORD0 * 4))
+            | ((component::FLOAT4 as u64) << (semantic::TANGENT * 4)),
+    };
+    let n = 16;
+    let shared = grid_at(n, 0.0);
+    let mut v = Vec::new();
+    let mut idx = Vec::new();
+    for (k, &i) in grid_indices(n, 0).iter().enumerate() {
+        v.extend_from_slice(&shared[i as usize * 20..(i as usize + 1) * 20]);
+        push_f32s(&mut v, &[1.0, (k % 7) as f32 * 1e-3, 0.0, 1.0]);
+        idx.push(k as u16);
+    }
+    let geom = GeometryData { decl, stride: 36, vertices: &v, indices: &idx };
+    let d = decimate(&geom, 60, 0.01, false).unwrap().expect("welded soup must simplify");
+    assert!(d.indices.len() < idx.len() / 2);
+    assert_compact(&d, 36);
+    // Output vertices are still byte-exact input vertices (tangent included).
+    for out in d.vertices.as_chunks::<36>().0 {
+        assert!(v.as_chunks::<36>().0.iter().any(|inp| inp == out));
+    }
+}

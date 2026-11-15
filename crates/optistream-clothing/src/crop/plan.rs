@@ -153,3 +153,117 @@ pub(super) fn axis(lo: f64, hi: f64, min_n: u32, max_n: u32) -> Axis {
     }
     Axis::FULL
 }
+
+#[cfg(test)]
+mod tests {
+    use optistream_rage::drawable::ShaderInfo;
+
+    use super::*;
+
+    fn shader(name: &str, textures: &[(&str, &str)]) -> ShaderInfo {
+        ShaderInfo {
+            name_hash: joaat(name),
+            file_hash: 0,
+            textures: textures.iter().map(|&(p, t)| (joaat(p), t.to_owned())).collect(),
+        }
+    }
+
+    fn drawable(shaders: Vec<ShaderInfo>) -> DrawableInfo {
+        DrawableInfo {
+            offset: 0,
+            hash: 0,
+            has_skeleton: true,
+            shaders,
+            texture_dict: None,
+            lods: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+        }
+    }
+
+    fn embedded(names: &[&str]) -> HashSet<String> {
+        names.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn physical_size_reads_the_graphics_flags_of_the_header() {
+        let mut header = vec![0u8; 16];
+        // 3 pages of the base size (0x2000 << 1).
+        let flags = PageFlags::from_counts(1, [3, 0, 0, 0, 0], 0);
+        header[12..16].copy_from_slice(&flags.0.to_le_bytes());
+        assert_eq!(physical_size(&header), 3 * 0x4000);
+        // Flags of the other segment are not read.
+        header[8..12].copy_from_slice(&PageFlags::from_counts(4, [9, 0, 0, 0, 0], 0).0.to_le_bytes());
+        assert_eq!(physical_size(&header), 3 * 0x4000);
+        // Truncated header: unknown, counted as nothing.
+        assert_eq!(physical_size(&header[..15]), 0);
+        assert_eq!(physical_size(&[]), 0);
+    }
+
+    #[test]
+    fn plain_ped_shaders_with_group_textures_are_accepted() {
+        let d = drawable(vec![
+            shader("ped", &[("DiffuseSampler", "Jbib_Diff_000_A"), ("BumpSampler", "jbib_normal_000"), ("SpecSampler", "jbib_spec_000")]),
+            shader("ped_default_cutout", &[("DiffuseSampler", "jbib_diff_000_a")]),
+        ]);
+        let emb = embedded(&["jbib_normal_000", "jbib_spec_000"]);
+        // Diffuse supplied by the variations of the group.
+        assert!(check_shaders(&d, &emb, true).is_ok());
+        // Without variations, an embedded diffuse is enough (names compared lowercased).
+        let emb = embedded(&["jbib_diff_000_a", "jbib_normal_000", "jbib_spec_000"]);
+        assert!(check_shaders(&d, &emb, false).is_ok());
+    }
+
+    #[test]
+    fn shader_is_also_recognised_by_its_file_name() {
+        let s = ShaderInfo { name_hash: 0, file_hash: joaat("ped_default.sps"), textures: Vec::new() };
+        assert!(check_shaders(&drawable(vec![s]), &HashSet::new(), false).is_ok());
+    }
+
+    #[test]
+    fn shaders_with_uv_transforms_or_unknown_names_are_refused() {
+        for name in ["ped_wrinkle", "ped_cloth", "ped_decal", "ped_emissive", "ped_palette", "not_a_shader"] {
+            let d = drawable(vec![shader(name, &[])]);
+            assert!(check_shaders(&d, &HashSet::new(), true).is_err(), "{name}");
+        }
+        // One bad shader among good ones refuses the whole drawable.
+        let d = drawable(vec![shader("ped", &[]), shader("ped_fur", &[])]);
+        assert!(check_shaders(&d, &HashSet::new(), true).is_err());
+    }
+
+    #[test]
+    fn diffuse_found_nowhere_in_the_group_is_refused() {
+        let d = drawable(vec![shader("ped", &[("DiffuseSampler", "jbib_diff_000_a")])]);
+        assert!(check_shaders(&d, &HashSet::new(), false).is_err());
+    }
+
+    #[test]
+    fn external_normal_or_specular_maps_are_refused_even_with_variations() {
+        for p in ["BumpSampler", "SpecSampler"] {
+            let d = drawable(vec![shader("ped", &[(p, "shared_map")])]);
+            assert!(check_shaders(&d, &HashSet::new(), true).is_err(), "{p}");
+            assert!(check_shaders(&d, &embedded(&["shared_map"]), false).is_ok(), "{p}");
+        }
+    }
+
+    #[test]
+    fn placeholders_empty_slots_and_palette_samplers_are_ignored() {
+        let d = drawable(vec![shader(
+            "ped_default",
+            &[
+                ("WrinkleMaskSampler_0", "GiveMeChecker"),
+                ("SpecSampler", "none"),
+                ("BumpSampler", ""),
+                ("TextureSamplerDiffPal", "jbib_pal"),
+                ("TintPaletteSampler", "tint"),
+            ],
+        )]);
+        assert!(check_shaders(&d, &HashSet::new(), false).is_ok());
+    }
+
+    #[test]
+    fn protected_or_unknown_samplers_are_refused() {
+        for p in ["WrinkleMaskSampler_0", "WrinkleSampler_A", "DetailSampler", "EmissiveSampler"] {
+            let d = drawable(vec![shader("ped", &[(p, "some_texture")])]);
+            assert!(check_shaders(&d, &embedded(&["some_texture"]), true).is_err(), "{p}");
+        }
+    }
+}

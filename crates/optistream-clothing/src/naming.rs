@@ -109,4 +109,56 @@ mod tests {
         assert_eq!(drawable_names("mp_m_freemode_01_p_x^p_head_diff_010_h.ytd")[2], "mp_m_freemode_01_p_x^p_head_010.ydd");
         assert!(drawable_names("hair_normal_007.ytd").is_empty());
     }
+
+    #[test]
+    fn parse_without_prefix_index_or_extension() {
+        let n = parse("JBIB_012_U.YDD");
+        assert_eq!((n.prefix.as_str(), n.slot.as_str(), n.index), ("", "jbib", Some(12)));
+        let n = parse("hair.ydd");
+        assert_eq!((n.slot.as_str(), n.index), ("hair", None));
+        let n = parse("lowr_007_r");
+        assert_eq!((n.slot.as_str(), n.index), ("lowr", Some(7)));
+        // A lone `p` is a slot name, not a prop marker.
+        assert_eq!(parse("p.ydd").slot, "p");
+        let p = parse("p_eyes_diff_002_a.ytd");
+        assert_eq!((p.slot.as_str(), p.index), ("p_eyes", Some(2)));
+        // The first numeric part is the index, wherever it is.
+        assert_eq!(parse("m^accs_x_004_u.ydd").index, Some(4));
+    }
+
+    #[test]
+    fn drawable_names_edge_cases() {
+        // Upper case and no prefix.
+        assert_eq!(drawable_names("JBIB_DIFF_001_A_UNI.YTD"), ["jbib_001_u.ydd", "jbib_001_r.ydd", "jbib_001.ydd"]);
+        // `diff` without an index after it.
+        assert!(drawable_names("jbib_diff.ytd").is_empty());
+        // `diff` in the prefix does not make a variation.
+        assert!(!is_variation_texture("mp_diff_x^jbib_000_u.ytd"));
+        assert!(drawable_names("mp_diff_x^jbib_000_u.ytd").is_empty());
+        // Every candidate keeps the folder-free prefix and ends in .ydd.
+        for n in drawable_names("x^task_diff_031_b_uni.ytd") {
+            assert!(n.starts_with("x^task_031") && n.ends_with(".ydd"), "{n}");
+        }
+    }
+
+    #[test]
+    fn every_race_tag_marks_a_skin_texture() {
+        for race in RACE_TAGS {
+            assert!(is_skin_texture(&format!("uppr_diff_000_a_{race}.ytd")), "{race}");
+            assert!(is_skin_texture(&format!("UPPR_DIFF_000_A_{}.YTD", race.to_uppercase())), "{race}");
+        }
+        // The race tag must be the last part, on a diffuse.
+        assert!(!is_skin_texture("uppr_diff_000_whi_a.ytd"));
+        assert!(!is_skin_texture("uppr_normal_000_whi.ytd"));
+    }
+
+    #[test]
+    fn large_slots() {
+        for s in ["uppr", "lowr", "jbib", "accs", "task", "hair", "feet", "berd"] {
+            assert!(is_large_slot(s), "{s}");
+        }
+        for s in ["hand", "teef", "decl", "head", "p_head", "JBIB", ""] {
+            assert!(!is_large_slot(s), "{s}");
+        }
+    }
 }

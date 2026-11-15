@@ -14,3 +14,6 @@ pub use analyze::{analyze, Analysis, AnalyzedFile};
 pub use report::{FileReport, FileStatus, Output, Report, Totals};
 pub use optimize::optimize;
 
+
+#[cfg(test)]
+mod tests;
