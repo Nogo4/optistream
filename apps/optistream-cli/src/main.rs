@@ -1,16 +1,17 @@
 //! Command-line front-end, mainly for testing and batch runs.
 //!
-//! optistream-cli analyze  <resource dir> [--method clothing|mapping] [--preset id] [--only <relative path>]...
-//! optistream-cli optimize <resource dir> (--out <dir> | --in-place) [--method clothing|mapping] [--preset id] [--set key=value]... [--overwrite] [--only <relative path>]...
+//! optistream-cli analyze  <resource dir> [--method clothing|mapping|vehicle] [--preset id] [--only <relative path>]...
+//! optistream-cli optimize <resource dir> (--out <dir> | --in-place) [--method clothing|mapping|vehicle] [--preset id] [--set key=value]... [--overwrite] [--only <relative path>]...
 //! optistream-cli crops    <resource dir>   (UV crop diagnostics)
 //! optistream-cli inspect  <file>...
+//! optistream-cli verify   <file>...   (every texture level decodes, every index valid, segment sizes = flags)
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use optistream_clothing::ClothingMethod;
 use optistream_core::{Method, Output, Progress, Settings};
-use optistream_rage::{drawable, texture, Resource, Segment};
+use optistream_rage::{drawable, fragment, texture, Resource, Segment};
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -20,7 +21,8 @@ fn main() -> Result<()> {
     let method: Box<dyn Method> = match flag("--method").as_deref() {
         None | Some("clothing") => Box::new(ClothingMethod::new()),
         Some("mapping") => Box::new(optistream_mapping::MappingMethod::new()),
-        Some(other) => bail!("unknown method {other} (clothing|mapping)"),
+        Some("vehicle") => Box::new(optistream_vehicle::VehicleMethod::new()),
+        Some(other) => bail!("unknown method {other} (clothing|mapping|vehicle)"),
     };
     let method = method.as_ref();
     // `--only <relative path>` (repeatable) restricts the run to some files.
@@ -48,6 +50,16 @@ fn main() -> Result<()> {
             for p in &args[1..] {
                 inspect(Path::new(p))?;
             }
+        }
+        Some("verify") => {
+            let mut bad = 0;
+            for p in &args[1..] {
+                if let Err(e) = verify(Path::new(p)) {
+                    bad += 1;
+                    println!("FAIL {p} : {e:#}");
+                }
+            }
+            println!("{} fichier(s) vérifié(s), {bad} en échec", args.len() - 1);
         }
         Some("crops") => {
             // UV crop diagnostics: every candidate group and why it is (not) cropped.
@@ -142,6 +154,65 @@ fn inspect(path: &Path) -> Result<()> {
                 }
             }
         }
+    } else if ext == "yft" {
+        let f = fragment::read_fragment(&res)?;
+        for (i, d) in f.drawables().enumerate() {
+            let tris: Vec<u64> = (0..4).map(|l| d.lod_triangles(l)).collect();
+            println!("  drawable {i} shaders {} tris {tris:?}", d.shaders.len());
+            if let Some(td) = d.texture_dict {
+                for t in texture::read_dictionary(&res, td)? {
+                    print_tex(&res, &t);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Decodes every level of every texture of a file and checks the graphics segment size.
+fn verify(path: &Path) -> Result<()> {
+    use optistream_texture::format::{level_dims, level_size};
+    let bytes = std::fs::read(path)?;
+    let res = Resource::parse(&bytes)?;
+    anyhow::ensure!(res.graphics.len() as u64 == res.graphics_flags.size(), "graphics {} != flags {}", res.graphics.len(), res.graphics_flags.size());
+    anyhow::ensure!(res.system.len() as u64 == res.system_flags.size(), "system {} != flags {}", res.system.len(), res.system_flags.size());
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+    let kind = optistream_vehicle::process::Kind::of(&name).context("unknown kind")?;
+    let mut entries = Vec::new();
+    if kind == optistream_vehicle::process::Kind::Ytd {
+        entries = texture::read_dictionary(&res, 0)?;
+    } else {
+        let mut seen = std::collections::HashSet::new();
+        for d in optistream_vehicle::process::read_drawables(&res, kind)? {
+            if let Some(td) = d.texture_dict.filter(|td| seen.insert(*td)) {
+                entries.extend(texture::read_dictionary(&res, td)?);
+            }
+            // Geometry: buffers inside the segment, every index within its vertex buffer.
+            for g in d.geometries() {
+                let vlen = g.vertex_count as usize * g.vertex_stride as usize;
+                for ptr in [g.vertex_ptr, g.vertex_ptr2].into_iter().filter(|&p| p != 0) {
+                    res.slice(ptr, vlen).with_context(|| format!("geometry 0x{:X} vertices", g.offset))?;
+                }
+                let idx = res.slice(g.index_ptr, g.index_count as usize * 2).with_context(|| format!("geometry 0x{:X} indices", g.offset))?;
+                anyhow::ensure!(g.index_count % 3 == 0, "geometry 0x{:X}: index count not a multiple of 3", g.offset);
+                let bad = idx.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).find(|&i| i >= g.vertex_count);
+                anyhow::ensure!(bad.is_none(), "geometry 0x{:X}: index {:?} >= {} vertices", g.offset, bad, g.vertex_count);
+            }
+        }
+    }
+    for e in &entries {
+        let Some((Segment::Graphics, mut off)) = res.resolve(e.data_ptr) else { continue };
+        if optistream_texture::format::layout(e.format).is_none() {
+            continue;
+        }
+        for l in 0..e.levels.max(1) as u32 {
+            let (w, h) = level_dims(e.width as u32, e.height as u32, l);
+            let len = level_size(e.format, w, h);
+            anyhow::ensure!(off + len <= res.graphics.len(), "texture {} level {l} out of the segment", e.name);
+            optistream_texture::codec::decode(e.format, w, h, &res.graphics[off..off + len])
+                .with_context(|| format!("texture {} level {l}", e.name))?;
+            off += len;
+        }
     }
     Ok(())
 }
@@ -153,3 +224,4 @@ fn print_tex(res: &Resource, t: &texture::TextureEntry) {
         t.name, t.width, t.height, t.format, t.levels, t.stride, seg
     );
 }
+

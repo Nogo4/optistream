@@ -162,8 +162,14 @@ impl Report {
                 FileStatus::Unchanged if f.warnings.is_empty() => continue,
                 FileStatus::Error(e) => s += &format!("- {} : ERREUR {}\n", f.rel.display(), e),
                 _ => {
+                    // The virtual memory is only shown when it changed (geometry reduction).
+                    let virt = if f.before.system != f.after.system {
+                        format!(", virtuelle {} → {}", mib(f.before.system), mib(f.after.system))
+                    } else {
+                        String::new()
+                    };
                     s += &format!(
-                        "- {} : physique {} → {}, disque {} → {}\n",
+                        "- {} : physique {} → {}{virt}, disque {} → {}\n",
                         f.rel.display(),
                         mib(f.before.graphics),
                         mib(f.after.graphics),

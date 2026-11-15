@@ -2414,6 +2414,7 @@ dependencies = [
  "optistream-clothing",
  "optistream-core",
  "optistream-mapping",
+ "optistream-vehicle",
  "rfd",
  "serde",
  "serde_json",
@@ -2428,6 +2429,8 @@ dependencies = [
  "optistream-core",
  "optistream-mapping",
  "optistream-rage",
+ "optistream-texture",
+ "optistream-vehicle",
 ]
 
 [[package]]
@@ -2492,6 +2495,19 @@ dependencies = [
  "rayon",
  "texpresso",
  "texture2ddecoder",
+]
+
+[[package]]
+name = "optistream-vehicle"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "optistream-core",
+ "optistream-mapping",
+ "optistream-mesh",
+ "optistream-rage",
+ "optistream-texture",
+ "rayon",
 ]
 
 [[package]]

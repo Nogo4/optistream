@@ -1,0 +1,15 @@
+[package]
+name = "optistream-vehicle"
+description = "OptiStream method for vehicles (ytd and textures embedded in yft/ydr/ydd)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+optistream-core.workspace = true
+optistream-mapping.workspace = true
+optistream-mesh.workspace = true
+optistream-rage.workspace = true
+optistream-texture.workspace = true
+rayon.workspace = true

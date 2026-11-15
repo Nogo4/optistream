@@ -5,10 +5,12 @@
 //! re-lays out the graphics segment (texture pixel data), recomputing the page flags.
 
 pub mod drawable;
+pub mod fragment;
 pub mod gfx;
 pub mod joaat;
 pub mod pages;
 pub mod rsc7;
+pub mod sys;
 pub mod texture;
 
 pub use rsc7::{PageFlags, Resource, Segment, GRAPHICS_BASE, SYSTEM_BASE};

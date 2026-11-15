@@ -194,10 +194,11 @@ impl eframe::App for App {
     }
 }
 
-/// Registered methods. Vehicles will be added here once implemented.
+/// Registered methods.
 fn registered_methods() -> Vec<Arc<dyn Method>> {
     vec![
         Arc::new(optistream_clothing::ClothingMethod::new()),
         Arc::new(optistream_mapping::MappingMethod::new()),
+        Arc::new(optistream_vehicle::VehicleMethod::new()),
     ]
 }
