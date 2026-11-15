@@ -16,6 +16,12 @@ pub const MESH_BUDGET_LARGE: &str = "mesh.budget_large";
 pub const MESH_BUDGET_SMALL: &str = "mesh.budget_small";
 pub const MESH_MAX_ERROR: &str = "mesh.max_error_pct";
 pub const MESH_LOWER_LODS: &str = "mesh.lower_lods";
+pub const GEO_ENABLED: &str = "geo.enabled";
+pub const GEO_HIGH_FLOOR: &str = "geo.high_floor_pct";
+pub const GEO_HIGH_ERROR: &str = "geo.high_error_pct";
+
+/// Virtual memory the geometry reduction gets under (FiveM warning threshold).
+pub const GEO_BUDGET: u64 = 16 * 1024 * 1024;
 
 pub fn params() -> Vec<ParamSpec> {
     let flag = |key, label, group, help| ParamSpec { key, label, group, help, kind: ParamKind::Bool };
@@ -30,7 +36,7 @@ pub fn params() -> Vec<ParamSpec> {
             key: OPT_MIN_PHYSICAL,
             label: "Mémoire physique minimale",
             group: "Général",
-            help: "Seuls les fichiers dont la mémoire physique déclarée dépasse cette valeur sont optimisés ; 16 Mio est le seuil d'avertissement de FiveM. 0 : tous les fichiers.",
+            help: "Seuls les fichiers dont la mémoire physique déclarée dépasse cette valeur sont optimisés (ou la mémoire virtuelle, si « Réduire sous 16 Mio de mémoire virtuelle » est actif) ; 16 Mio est le seuil d'avertissement de FiveM. 0 : tous les fichiers.",
             kind: ParamKind::Int { min: 0, max: 128, step: 4, unit: "Mio" },
         },
         flag(MESH_ENABLED, "Réduire les polygones", "Maillages", "Décimation du LOD High au-dessus du budget (jamais sur le cloth)."),
@@ -57,10 +63,26 @@ pub fn params() -> Vec<ParamSpec> {
             kind: ParamKind::Float { min: 0.05, max: 5.0, step: 0.05, unit: "%" },
         },
         flag(MESH_LOWER_LODS, "Plafonner les LOD inférieurs", "Maillages", "Un LOD Med/Low plus lourd que le nouveau High est réduit à sa taille."),
+        flag(GEO_ENABLED, "Réduire sous 16 Mio de mémoire virtuelle", "Mémoire virtuelle", "Si un .ydd dépasse encore 16 Mio de mémoire virtuelle (avertissement FiveM) après le budget de triangles, ses polygones sont réduits jusqu'à passer dessous : LODs lointains d'abord (VLow, Low, Med), le LOD High seulement si ça ne suffit pas. Bords, coutures et skinning préservés ; jamais sur le cloth. Le segment système est toujours recompacté (sans perte)."),
+        ParamSpec {
+            key: GEO_HIGH_FLOOR,
+            label: "Plancher du LOD High",
+            group: "Mémoire virtuelle",
+            help: "Part minimale des triangles que le LOD High garde pour passer sous 16 Mio (après le budget de triangles).",
+            kind: ParamKind::Int { min: 50, max: 100, step: 5, unit: "%" },
+        },
+        ParamSpec {
+            key: GEO_HIGH_ERROR,
+            label: "Tolérance du LOD High",
+            group: "Mémoire virtuelle",
+            help: "Écart de forme maximal du LOD High pendant cette réduction, en % de la taille de la pièce (les LODs lointains sont plus permissifs).",
+            kind: ParamKind::Float { min: 0.0, max: 10.0, step: 0.1, unit: "%" },
+        },
     ]
 }
 
-fn preset(id: &'static str, label: &'static str, description: &'static str, budgets: [i64; 2], err: f64, halve: bool, crop: bool) -> Preset {
+#[allow(clippy::too_many_arguments)]
+fn preset(id: &'static str, label: &'static str, description: &'static str, budgets: [i64; 2], err: f64, halve: bool, crop: bool, geo: Option<(i64, f64)>) -> Preset {
     let values = Settings::default()
         .with(OPT_ONLY_3D, Value::Bool(false))
         .with(OPT_MIN_PHYSICAL, Value::Int(16))
@@ -74,15 +96,18 @@ fn preset(id: &'static str, label: &'static str, description: &'static str, budg
         .with(MESH_BUDGET_LARGE, Value::Int(budgets[0]))
         .with(MESH_BUDGET_SMALL, Value::Int(budgets[1]))
         .with(MESH_MAX_ERROR, Value::Float(err))
-        .with(MESH_LOWER_LODS, Value::Bool(true));
+        .with(MESH_LOWER_LODS, Value::Bool(true))
+        .with(GEO_ENABLED, Value::Bool(geo.is_some()))
+        .with(GEO_HIGH_FLOOR, Value::Int(geo.map_or(80, |g| g.0)))
+        .with(GEO_HIGH_ERROR, Value::Float(geo.map_or(0.5, |g| g.1)));
     Preset { id, label, description, values }
 }
 
 pub fn presets() -> Vec<Preset> {
     vec![
-        preset("leger", "Léger", "Textures : conversion, puissance de 2, mipmaps. ≤ 80k tris.", [80_000, 20_000], 0.2, false, false),
-        preset("equilibre", "Équilibré", "Textures : conversion, puissance de 2, mipmaps, recadrage sur la zone utilisée. ≤ 40k tris.", [40_000, 10_000], 0.5, false, true),
-        preset("fort", "Fort", "Textures : comme Équilibré, puis divisées par 2. ≤ 20k tris.", [20_000, 5_000], 1.0, true, true),
+        preset("leger", "Léger", "Textures : conversion, puissance de 2, mipmaps. ≤ 80k tris.", [80_000, 20_000], 0.2, false, false, None),
+        preset("equilibre", "Équilibré", "Textures : conversion, puissance de 2, mipmaps, recadrage sur la zone utilisée. ≤ 40k tris, puis sous 16 Mio de mémoire virtuelle (High ≥ 80 %).", [40_000, 10_000], 0.5, false, true, Some((80, 0.5))),
+        preset("fort", "Fort", "Textures : comme Équilibré, puis divisées par 2. ≤ 20k tris, puis sous 16 Mio de mémoire virtuelle (High ≥ 60 %).", [20_000, 5_000], 1.0, true, true, Some((60, 1.0))),
     ]
 }
 
@@ -102,6 +127,11 @@ pub struct Config {
     pub budget_small: u64,
     pub max_error: f32,
     pub lower_lods: bool,
+    pub geo_enabled: bool,
+    /// Smallest share of its triangles the High LOD keeps in the virtual memory reduction.
+    pub geo_high_floor: f64,
+    /// Error tolerance of the High LOD in that reduction (fraction of the geometry extent).
+    pub geo_high_error: f32,
 }
 
 impl Config {
@@ -120,6 +150,9 @@ impl Config {
             budget_small: s.int(MESH_BUDGET_SMALL, 10_000).max(1) as u64,
             max_error: (s.float(MESH_MAX_ERROR, 0.5) / 100.0) as f32,
             lower_lods: s.bool(MESH_LOWER_LODS, true),
+            geo_enabled: s.bool(GEO_ENABLED, true),
+            geo_high_floor: s.int(GEO_HIGH_FLOOR, 80).clamp(50, 100) as f64 / 100.0,
+            geo_high_error: (s.float(GEO_HIGH_ERROR, 0.5).clamp(0.0, 10.0) / 100.0) as f32,
         }
     }
 
@@ -143,11 +176,25 @@ impl Config {
         skin && matches!(role, TextureRole::Diffuse | TextureRole::Other)
     }
 
-    /// Whether the declared physical memory of an RSC7 file (header bytes) does not exceed the threshold.
+    /// Whether the declared physical memory of an RSC7 file (header bytes) does not exceed
+    /// the threshold, nor its virtual memory when the virtual memory reduction is on.
     pub fn below_min_physical(&self, bytes: &[u8]) -> bool {
-        self.min_physical > 0
-            && bytes.len() >= 16
-            && optistream_rage::rsc7::PageFlags(u32::from_le_bytes(bytes[12..16].try_into().unwrap())).size() <= self.min_physical
+        use optistream_rage::rsc7::PageFlags;
+        if self.min_physical == 0 || bytes.len() < 16 {
+            return false;
+        }
+        let flags = |at: usize| PageFlags(u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())).size();
+        flags(12) <= self.min_physical && (!self.geo_enabled || flags(8) <= self.min_physical)
+    }
+
+    /// Limits of the virtual memory stage; with the reduction off, only the lossless
+    /// re-layout of the system segment is done.
+    pub fn geo_limits(&self) -> optistream_mesh::budget::Limits {
+        optistream_mesh::budget::Limits {
+            budget: if self.geo_enabled && self.mesh_enabled { GEO_BUDGET } else { u64::MAX },
+            high_floor: self.geo_high_floor,
+            high_error: self.geo_high_error,
+        }
     }
 
     pub fn budget_for_slot(&self, slot: &str) -> u64 {
@@ -176,8 +223,14 @@ mod tests {
 
     /// RSC7 header whose graphics flags (physical memory) declare `flags`.
     fn header(flags: PageFlags) -> Vec<u8> {
+        header2(PageFlags(0), flags)
+    }
+
+    /// RSC7 header with the given system (virtual) and graphics (physical) flags.
+    fn header2(system: PageFlags, graphics: PageFlags) -> Vec<u8> {
         let mut b = vec![0u8; 16];
-        b[12..16].copy_from_slice(&flags.0.to_le_bytes());
+        b[8..12].copy_from_slice(&system.0.to_le_bytes());
+        b[12..16].copy_from_slice(&graphics.0.to_le_bytes());
         b
     }
 
@@ -186,7 +239,8 @@ mod tests {
         let c = Config::from_settings(&Settings::default());
         assert!(!c.only_3d && !c.halve);
         assert!(c.crop_uv && c.convert_formats && c.fix_mips && c.force_pot);
-        assert!(c.mesh_enabled && c.reorder && c.lower_lods);
+        assert!(c.mesh_enabled && c.reorder && c.lower_lods && c.geo_enabled);
+        assert!((c.geo_high_floor - 0.8).abs() < 1e-12 && (c.geo_high_error - 0.005).abs() < 1e-7);
         assert_eq!(c.min_physical, 16 * MIB);
         assert_eq!((c.budget_large, c.budget_small), (40_000, 10_000));
         assert!((c.max_error - 0.005).abs() < 1e-9);
@@ -241,6 +295,11 @@ mod tests {
         assert!(l.max_error < e.max_error && e.max_error < f.max_error);
         assert!(!l.crop_uv && e.crop_uv && f.crop_uv);
         assert!(!l.halve && !e.halve && f.halve);
+        // Léger never reduces for the virtual memory; Fort goes further than Équilibré.
+        assert!(!l.geo_enabled && e.geo_enabled && f.geo_enabled);
+        assert!(f.geo_high_floor < e.geo_high_floor && f.geo_high_error > e.geo_high_error);
+        assert_eq!(l.geo_limits().budget, u64::MAX);
+        assert_eq!(e.geo_limits().budget, GEO_BUDGET);
         // Small pieces always get a smaller budget than large ones.
         for c in [&l, &e, &f] {
             assert!(c.budget_small < c.budget_large);
@@ -281,6 +340,19 @@ mod tests {
         // Threshold 0: every file is processed.
         let all = Config::from_settings(&Settings::default().with(OPT_MIN_PHYSICAL, Value::Int(0)));
         assert!(!all.below_min_physical(&header(PageFlags(0))));
+    }
+
+    #[test]
+    fn min_physical_threshold_checks_the_virtual_memory_with_the_reduction() {
+        // 2 MiB physical, 32 MiB virtual (the warned hair / jbib files).
+        let bytes = header2(PageFlags::from_counts(8, [16, 0, 0, 0, 0], 0), PageFlags::from_counts(8, [1, 0, 0, 0, 0], 0));
+        assert!(!preset_config("equilibre").below_min_physical(&bytes));
+        assert!(!preset_config("fort").below_min_physical(&bytes));
+        // Reduction off (Léger): the physical memory alone decides.
+        assert!(preset_config("leger").below_min_physical(&bytes));
+        // Virtual memory at the threshold: still skipped.
+        let at = header2(PageFlags::from_counts(8, [8, 0, 0, 0, 0], 0), PageFlags::from_counts(8, [1, 0, 0, 0, 0], 0));
+        assert!(preset_config("equilibre").below_min_physical(&at));
     }
 
     #[test]

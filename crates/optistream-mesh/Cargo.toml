@@ -9,3 +9,4 @@ license.workspace = true
 anyhow.workspace = true
 meshopt.workspace = true
 optistream-rage.workspace = true
+rayon.workspace = true

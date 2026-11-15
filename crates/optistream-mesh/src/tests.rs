@@ -439,3 +439,30 @@ fn triangle_soup_is_welded_before_simplification() {
         assert!(v.as_chunks::<36>().0.iter().any(|inp| inp == out));
     }
 }
+
+#[test]
+fn identical_vertices_are_merged_without_loss() {
+    // Triangle soup of a grid: every corner repeated byte for byte.
+    let (decl, shared, grid_idx) = grid(8);
+    let mut v = Vec::new();
+    let mut idx = Vec::new();
+    for (k, &i) in grid_idx.iter().enumerate() {
+        v.extend_from_slice(&shared[i as usize * 20..(i as usize + 1) * 20]);
+        idx.push(k as u16);
+    }
+    let geom = GeometryData { decl, stride: 20, vertices: &v, indices: &idx };
+    let d = dedupe_vertices(&geom).expect("repeated vertices");
+    assert_eq!(d.vertices.len(), shared.len());
+    assert_eq!(d.error, 0.0);
+    // Same triangles, in the same order, drawing the same vertex bytes.
+    assert_eq!(d.indices.len(), idx.len());
+    for (k, &i) in d.indices.iter().enumerate() {
+        assert_eq!(&d.vertices[i as usize * 20..(i as usize + 1) * 20], &v[k * 20..(k + 1) * 20]);
+    }
+    // Nothing repeated: nothing to do.
+    let plain = GeometryData { decl, stride: 20, vertices: &shared, indices: &grid_idx };
+    assert!(dedupe_vertices(&plain).is_none());
+    // An index past the vertices is refused.
+    let bad = [0u16, 1, 9999];
+    assert!(dedupe_vertices(&GeometryData { decl, stride: 20, vertices: &v, indices: &bad }).is_none());
+}
