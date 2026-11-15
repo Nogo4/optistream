@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests;
 
+pub mod budget;
 pub mod codec;
 pub mod format;
 pub mod ops;

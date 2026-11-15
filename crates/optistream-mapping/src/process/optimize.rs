@@ -2,8 +2,7 @@
 
 use anyhow::{bail, Result};
 use optistream_core::mib;
-use optistream_rage::gfx::{self, GfxBlock};
-use optistream_rage::texture::{self as rtex};
+use optistream_texture::budget;
 
 use crate::config::Config;
 use crate::process::budget::describe;
@@ -33,34 +32,12 @@ pub fn optimize(kind: Kind, bytes: &[u8], cfg: &Config, index: &RoleIndex) -> Re
     if !any_change && fp.physical_after >= p.res.graphics_flags.size() {
         return Ok((None, changes, warnings));
     }
-    let mut new_blocks = Vec::with_capacity(fp.blocks.len());
-    for b in fp.blocks {
-        let refs: Vec<usize> = b.users.iter().map(|&u| p.textures[u].entry.data_ptr_field()).collect();
-        match b.enc {
-            Some(enc) => {
-                for &u in &b.users {
-                    rtex::write_texture_header(
-                        &mut p.res,
-                        p.textures[u].entry.struct_offset,
-                        enc.width as u16,
-                        enc.height as u16,
-                        enc.stride,
-                        enc.format,
-                        enc.levels as u8,
-                    );
-                }
-                new_blocks.push(GfxBlock { data: enc.data, refs });
-            }
-            None => {
-                let len = p.textures[b.users[0]].data_len;
-                new_blocks.push(GfxBlock { data: p.res.graphics[b.off..b.off + len].to_vec(), refs });
-            }
-        }
-    }
     if !any_change {
         changes.push("pages graphiques recompactées".to_owned());
     }
-    gfx::rebuild(&mut p.res, new_blocks)?;
+    let entries: Vec<_> = p.textures.iter().map(|t| t.entry.clone()).collect();
+    let lens: Vec<usize> = p.textures.iter().map(|t| t.data_len).collect();
+    budget::apply(&mut p.res, &entries, &lens, fp.blocks)?;
     let out = p.res.to_bytes(9)?;
     // Sanity check: the result must parse back with the same structure.
     let check = parse(kind, &out, index)?;

@@ -106,14 +106,17 @@ pub struct RoleIndex {
 
 impl RoleIndex {
     pub fn add_shaders<'a>(&mut self, shaders: impl IntoIterator<Item = &'a ShaderInfo>) {
+        self.add_shaders_with(shaders, |s, param| if is_emissive_shader(s) { Usage::Protected } else { sampler_usage(param) });
+    }
+
+    /// Same as [`Self::add_shaders`], with the usage of each `(shader, sampler hash)` given by `usage`.
+    pub fn add_shaders_with<'a>(&mut self, shaders: impl IntoIterator<Item = &'a ShaderInfo>, usage: impl Fn(&ShaderInfo, u32) -> Usage) {
         for s in shaders {
-            let emissive = is_emissive_shader(s);
             for (param, name) in &s.textures {
                 if name.is_empty() {
                     continue;
                 }
-                let usage = if emissive { Usage::Protected } else { sampler_usage(*param) };
-                self.insert(name.to_ascii_lowercase(), usage);
+                self.insert(name.to_ascii_lowercase(), usage(s, *param));
             }
         }
     }
