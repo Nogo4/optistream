@@ -26,6 +26,10 @@ Each method has three presets: **Léger** (fixes only), **Équilibré** (the def
 
 > Always test the optimised resource in game before putting it into production.
 
+## Download
+
+Prebuilt binaries for Windows and Linux are published on the [latest release](../../releases/tag/latest). Every push to `main` rebuilds it.
+
 ## Usage
 
 ### Desktop app
