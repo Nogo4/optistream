@@ -91,6 +91,7 @@ jobs:
           cp target/release/optistream${{ matrix.exe }} dist/
           cp target/release/optistream-cli${{ matrix.exe }} dist/
           cp README.md dist/
+          cp LICENSE dist/
 
       - name: Upload release artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

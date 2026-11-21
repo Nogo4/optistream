@@ -16,7 +16,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "Proprietary"
+license = "MIT"
 
 [workspace.dependencies]
 optistream-i18n = { path = "crates/optistream-i18n" }

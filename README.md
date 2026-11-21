@@ -141,3 +141,7 @@ feat(vehicle): add vehicle method with texture and geometry reduction
 fix(rage): drop the zero tail of each page when re-laying out the system segment
 refactor(texture): extract the budget reduction engine shared by mappings
 ```
+
+## License
+
+OptiStream is released under the [MIT License](LICENSE). By contributing, you agree that your contributions are licensed under the same terms.
