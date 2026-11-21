@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::Result;
 use optistream_core::{FileAnalysis, FileCtx, FileOutcome, Issue, Method, ParamSpec, Preset, PreviewItem, Settings};
+use optistream_i18n::{t, tf};
 
 use crate::config::{self, Config};
 use crate::crop::{Group, RunPlan};
@@ -90,11 +91,11 @@ impl Method for ClothingMethod {
     }
 
     fn label(&self) -> &'static str {
-        "Vêtements / EUP"
+        t("clothing.method.label")
     }
 
     fn description(&self) -> &'static str {
-        "Vêtements addon et packs EUP : textures (.ytd et embarquées) et polygones (.ydd)."
+        t("clothing.method.description")
     }
 
     fn params(&self) -> Vec<ParamSpec> {
@@ -119,15 +120,15 @@ impl Method for ClothingMethod {
         let (kind, info) = file_info(ctx, group.as_deref());
         if let Some(reason) = skip_reason(&cfg, kind, data, group.as_deref()) {
             let kind = if kind == Kind::Ytd { "ytd" } else { "ydd" }.into();
-            return Ok(FileAnalysis { kind, summary: format!("ignoré ({reason})"), skipped: true, ..Default::default() });
+            return Ok(FileAnalysis { kind, summary: tf!("clothing.skip.summary", reason = reason), skipped: true, ..Default::default() });
         }
         let parsed = process::parse(kind, data, &info)?;
         let mut a = process::analyze(&parsed, &cfg, &info);
         if let Some(g) = &group {
-            a.issues.push(Issue::info(format!(
-                "recadrage UV prévu : textures réduites à {}, avec {} autre(s) fichier(s) du même vêtement",
-                g.window.describe(),
-                g.files.len() - 1
+            a.issues.push(Issue::info(tf!(
+                "clothing.issue.crop_planned",
+                window = g.window.describe(),
+                others = g.files.len() - 1
             )));
         }
         Ok(a)
@@ -184,9 +185,13 @@ impl Method for ClothingMethod {
         for ((prefix, slot), set) in indices {
             let max = set.iter().max().copied().unwrap_or(0) as usize;
             if set.len() > MAX_DRAWABLES_PER_COMPONENT || max >= MAX_DRAWABLES_PER_COMPONENT {
-                out.push(Issue::error(format!(
-                    "{prefix} / {slot} : {} drawables (index max {max}) — au-delà de {MAX_DRAWABLES_PER_COMPONENT}, invisibles pour les autres joueurs",
-                    set.len()
+                out.push(Issue::error(tf!(
+                    "clothing.issue.too_many_drawables",
+                    prefix = prefix,
+                    slot = slot,
+                    count = set.len(),
+                    max = max,
+                    limit = MAX_DRAWABLES_PER_COMPONENT
                 )));
             }
         }
@@ -198,7 +203,7 @@ impl Method for ClothingMethod {
         let group = self.group_of(ctx, &cfg);
         let (kind, info) = file_info(ctx, group.as_deref());
         if let Some(reason) = skip_reason(&cfg, kind, data, group.as_deref()) {
-            anyhow::bail!("fichier ignoré avec les réglages actuels ({reason}) : rien à comparer. Change ce réglage dans « Général » pour le traiter.");
+            anyhow::bail!(tf!("clothing.skip.preview", reason = reason));
         }
         process::preview(kind, data, &cfg, &info)
     }
@@ -208,11 +213,11 @@ impl Method for ClothingMethod {
 /// are processed together: the memory threshold applies to the heaviest of them.
 fn skip_reason(cfg: &Config, kind: Kind, data: &[u8], group: Option<&Group>) -> Option<String> {
     if cfg.only_3d && kind == Kind::Ytd {
-        return Some("« Fichiers 3D uniquement » : .ytd non traités".to_owned());
+        return Some(t("clothing.skip.only_3d").to_owned());
     }
     let below = match group {
         Some(g) => cfg.min_physical > 0 && g.max_physical <= cfg.min_physical,
         None => cfg.below_min_physical(data),
     };
-    below.then(|| format!("mémoire physique ≤ {} Mio, seuil « Mémoire physique minimale »", cfg.min_physical / (1024 * 1024)))
+    below.then(|| tf!("clothing.skip.below_min_physical", mib = cfg.min_physical / (1024 * 1024)))
 }

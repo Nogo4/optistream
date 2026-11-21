@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{ensure, Result};
+use optistream_i18n::{t, tf};
 use optistream_rage::drawable::DrawableInfo;
 use optistream_rage::joaat::joaat;
 use optistream_rage::rsc7::PageFlags;
@@ -33,15 +34,15 @@ impl Extent {
         let meta = TextureMeta { width: w, height: h, format: e.format, levels: e.levels as u32 };
         let data = match res.resolve(e.data_ptr) {
             Some((Segment::Graphics, off)) => &res.graphics[off..],
-            _ => anyhow::bail!("texture {} hors du segment graphique", e.name),
+            _ => anyhow::bail!(tf!("clothing.crop.outside_graphics", name = e.name)),
         };
         if exempt(&meta, data) {
             return Ok(());
         }
-        ensure!(w.min(h) >= 4, "texture {} trop petite pour être recadrée", e.name);
-        ensure!(fmt::is_pot(w) && fmt::is_pot(h), "texture {} non puissance de 2", e.name);
-        ensure!(fmt::layout(e.format).is_some(), "format de {} non géré", e.name);
-        ensure!(shaders::usage_from_name(&e.name) != Usage::Protected, "texture protégée {}", e.name);
+        ensure!(w.min(h) >= 4, tf!("clothing.crop.too_small", name = e.name));
+        ensure!(fmt::is_pot(w) && fmt::is_pot(h), tf!("clothing.crop.not_pot", name = e.name));
+        ensure!(fmt::layout(e.format).is_some(), tf!("clothing.crop.unsupported_format_of", name = e.name));
+        ensure!(shaders::usage_from_name(&e.name) != Usage::Protected, tf!("clothing.crop.protected_texture", name = e.name));
         let first = self.max_w == 0;
         self.min_w = if first { w } else { self.min_w.min(w) };
         self.min_h = if first { h } else { self.min_h.min(h) };
@@ -62,7 +63,7 @@ pub(super) fn plan_group(root: &Path, m: &Members) -> Result<Option<Group>> {
         let bytes = std::fs::read(root.join(rel))?;
         max_physical = max_physical.max(physical_size(&bytes));
         let p = process::crop_ready(Kind::Ydd, &bytes)?;
-        ensure!(!p.drawables.is_empty(), "aucun drawable");
+        ensure!(!p.drawables.is_empty(), t("clothing.crop.no_drawable"));
         for d in &p.drawables {
             let embedded: HashSet<String> = match d.texture_dict {
                 Some(td) => rtex::read_dictionary(&p.res, td)?.into_iter().map(|e| e.name.to_ascii_lowercase()).collect(),
@@ -113,7 +114,7 @@ fn physical_size(bytes: &[u8]) -> u64 {
 fn check_shaders(d: &DrawableInfo, embedded: &HashSet<String>, has_variations: bool) -> Result<()> {
     for s in &d.shaders {
         let name = shaders::shader_name(s).unwrap_or("?");
-        ensure!(CROP_SHADERS.contains(&name), "shader {name}");
+        ensure!(CROP_SHADERS.contains(&name), tf!("clothing.crop.shader", name = name));
         for (param, tex) in &s.textures {
             let tex = tex.to_ascii_lowercase();
             if tex.is_empty() || PLACEHOLDERS.contains(&tex.as_str()) || UV_FREE_SAMPLERS.iter().any(|s| joaat(s) == *param) {
@@ -121,12 +122,12 @@ fn check_shaders(d: &DrawableInfo, embedded: &HashSet<String>, has_variations: b
             }
             match shaders::sampler_usage(*param) {
                 Some(Usage::Role(TextureRole::Diffuse)) => {
-                    ensure!(has_variations || embedded.contains(&tex), "diffuse {tex} sans variation .ytd dans le groupe")
+                    ensure!(has_variations || embedded.contains(&tex), tf!("clothing.crop.diffuse_without_variation", name = tex))
                 }
                 Some(Usage::Role(TextureRole::Normal | TextureRole::Specular)) => {
-                    ensure!(embedded.contains(&tex), "texture externe {tex}")
+                    ensure!(embedded.contains(&tex), tf!("clothing.crop.external_texture", name = tex))
                 }
-                _ => anyhow::bail!("sampler 0x{param:08X} ({tex})"),
+                _ => anyhow::bail!(tf!("clothing.crop.sampler", hash = format!("{param:08X}"), texture = tex)),
             }
         }
     }

@@ -4,6 +4,7 @@
 //! unknown role (detail, height, dirt maps): those are only reduced when forcing, last.
 
 use anyhow::Result;
+use optistream_i18n::{t, tf};
 use optistream_texture::budget::{self, Access, BudgetTex, Hold, Limits, Rule, HOLD_PROTECTED};
 use optistream_texture::resource as texres;
 use optistream_texture::TextureRole;
@@ -14,7 +15,10 @@ use crate::config::{Config, FORCE_MAX_STEPS, FORCE_MIN_SIZE};
 use crate::process::Parsed;
 use crate::roles::Usage;
 
-const HOLD_READABLE: Hold = Hold { label: "textes / logos / enseignes (nom)", rank: 10 };
+/// Hold of texts / logos, labelled in the current language.
+fn hold_readable() -> Hold {
+    Hold { label: t("mapping.hold.readable"), rank: 10 }
+}
 
 pub(crate) fn limits(cfg: &Config) -> Limits {
     Limits {
@@ -30,7 +34,7 @@ pub(crate) fn limits(cfg: &Config) -> Limits {
 
 fn rule(readable: bool, role: Option<TextureRole>, cfg: &Config) -> Rule {
     let access = if readable {
-        Access::ForceOnly(HOLD_READABLE)
+        Access::ForceOnly(hold_readable())
     } else if role == Some(TextureRole::Other) {
         Access::ForceOnly(HOLD_PROTECTED)
     } else {
@@ -59,12 +63,18 @@ pub fn plan_file(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
 
 pub(super) fn describe(p: &Parsed, b: &BlockPlan) -> Option<String> {
     let enc = b.enc.as_ref()?;
-    let t = &p.textures[b.users[0]];
-    let mut s = format!("texture {} ({}) : {}", t.entry.name, t.usage.label(), enc.changes.join(", "));
+    let tex = &p.textures[b.users[0]];
+    let mut s = tf!("mapping.change.texture", name = tex.entry.name, role = tex.usage.label(), changes = enc.changes.join(", "));
     if b.steps > 0 {
-        s += &format!(" — réduction ciblée ÷{} (perte {:.1} %){}", 1u32 << b.steps, b.loss, if b.forced { ", forcée" } else { "" });
+        s += &format!(" — {}", reduction(b));
     }
     Some(s)
+}
+
+/// "targeted reduction ÷N (loss x %)", followed by ", forced" when the steps went past the limits.
+pub(super) fn reduction(b: &BlockPlan) -> String {
+    let forced = if b.forced { t("mapping.reduction.forced") } else { "" };
+    tf!("mapping.reduction.text", factor = 1u32 << b.steps, loss = format!("{:.1}", b.loss)) + forced
 }
 
 #[cfg(test)]
@@ -98,7 +108,7 @@ mod tests {
     fn readable_textures_wait_for_forcing_whatever_their_role() {
         for role in ROLES {
             let r = rule(true, role, &cfg("fort"));
-            assert_eq!((r.access, r.tier), (Access::ForceOnly(HOLD_READABLE), 2), "{role:?}");
+            assert_eq!((r.access, r.tier), (Access::ForceOnly(hold_readable()), 2), "{role:?}");
         }
     }
 
@@ -181,8 +191,8 @@ mod tests {
         let plain = describe(&p, &block(true, 0, false)).unwrap();
         assert!(plain.starts_with("texture wood_floor (") && plain.ends_with(": DXT5 → DXT1"), "{plain}");
         let reduced = describe(&p, &block(true, 1, false)).unwrap();
-        assert!(reduced.contains("÷2 (perte 1.5 %)") && !reduced.contains("forcée"), "{reduced}");
+        assert!(reduced.contains("÷2 (loss 1.5 %)") && !reduced.contains("forced"), "{reduced}");
         let forced = describe(&p, &block(true, 4, true)).unwrap();
-        assert!(forced.contains("÷16") && forced.ends_with(", forcée"), "{forced}");
+        assert!(forced.contains("÷16") && forced.ends_with(", forced"), "{forced}");
     }
 }

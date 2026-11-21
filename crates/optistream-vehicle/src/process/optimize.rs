@@ -3,6 +3,7 @@
 
 use anyhow::{bail, Result};
 use optistream_core::mib;
+use optistream_i18n::{t, tf};
 use optistream_texture::budget;
 
 use crate::config::Config;
@@ -31,14 +32,10 @@ pub fn optimize(
         warnings.extend(fp.warnings);
         let before = p.res.graphics_flags.size();
         if fp.physical_after > before {
-            warnings.push(format!(
-                "textures non modifiées : le résultat ({}) serait plus lourd que l'original ({})",
-                mib(fp.physical_after),
-                mib(before)
-            ));
+            warnings.push(tf!("vehicle.warn.textures_heavier", after = mib(fp.physical_after), before = mib(before)));
         } else if !fp.blocks.is_empty() && (!tex_changes.is_empty() || fp.physical_after < before) {
             if tex_changes.is_empty() {
-                changes.push("pages graphiques recompactées".to_owned());
+                changes.push(t("vehicle.change.repacked").to_owned());
             }
             changes.extend(tex_changes);
             let entries: Vec<_> = p.textures.iter().map(|t| t.entry.clone()).collect();
@@ -62,14 +59,14 @@ pub fn optimize(
                             changes.extend(gp.changes.iter().cloned());
                             written = true;
                         }
-                        Err(e) => warnings.push(format!("géométrie non modifiée : {e:#}")),
+                        Err(e) => warnings.push(tf!("vehicle.warn.geometry_unchanged", error = format!("{e:#}"))),
                     }
                 }
             }
             Ok(None) => {}
             // Layout not understood (shared or aliased buffers, pointer into geometry data):
             // the textures are still written, the geometry is left as it is.
-            Err(e) => warnings.push(format!("géométrie non modifiée : {e:#}")),
+            Err(e) => warnings.push(tf!("vehicle.warn.geometry_unchanged", error = format!("{e:#}"))),
         }
     }
 
@@ -80,11 +77,11 @@ pub fn optimize(
     // Sanity check: the result must parse back with the same structure.
     let check = parse(kind, &out, index, info)?;
     if check.textures.len() != p.textures.len() || check.drawables.len() != p.drawables.len() {
-        bail!("vérification après écriture échouée");
+        bail!(t("vehicle.error.verify"));
     }
     let geoms = |ds: &[optistream_rage::drawable::DrawableInfo]| ds.iter().map(|d| d.geometries().count()).sum::<usize>();
     if geoms(&check.drawables) != geoms(&p.drawables) {
-        bail!("vérification après écriture échouée (géométries)");
+        bail!(t("vehicle.error.verify_geometries"));
     }
     Ok((Some(out), changes, warnings))
 }

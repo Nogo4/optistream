@@ -1,0 +1,141 @@
+# app messages (fr). Keys are looked up as "app.<key>".
+
+# Shared labels
+common.cancel = "Annuler"
+common.error = "Erreur"
+common.ok = "OK"
+common.compare = "Comparer"
+common.compare_before_after = "Comparer avant / après"
+common.optimise = "Optimiser"
+common.optimise_file = "Optimiser ce fichier"
+common.optimise_selection = "Optimiser la sélection ({count})"
+common.physical_memory = "Mémoire physique"
+
+# Top bar
+top.tagline = "Optimisation des streams FiveM"
+top.lang_hint = "Langue de l'interface. Les résultats déjà calculés restent dans leur langue : relance une analyse pour les traduire."
+
+# Status bar
+status.ready = "Prêt"
+status.running = "{task} en cours"
+status.analysis_done = "Analyse terminée : {count} fichier(s)"
+status.optimisation_done = "Optimisation terminée : {optimised} / {processed} fichier(s) optimisé(s), mémoire physique {before} → {after}"
+status.comparison_ready = "Comparaison prête"
+
+# Background jobs
+job.analysis = "Analyse"
+job.optimisation = "Optimisation"
+job.comparison = "Comparaison"
+job.verifying = "Vérification des fichiers produits…"
+job.crashed = "plantage interne pendant la tâche"
+
+# Dialogs
+dialog.close.title = "Une tâche est en cours"
+dialog.close.line1 = "Quitter maintenant laisse les fichiers restants non traités :"
+dialog.close.line2 = "un export serait incomplet (il manquerait des fichiers)."
+dialog.close.quit = "Quitter quand même"
+dialog.close.continue = "Continuer la tâche"
+dialog.in_place.title = "Modifier le dossier directement ?"
+dialog.in_place.all = "Tous les fichiers concernés seront remplacés, sans sauvegarde."
+dialog.in_place.one = "Ce fichier sera remplacé, sans sauvegarde :"
+dialog.in_place.many = "Ces {count} fichiers seront remplacés, sans sauvegarde."
+dialog.in_place.confirm = "Confirmer"
+
+# Side panel: resource
+side.resource.title = "Ressource"
+side.resource.type = "Type"
+side.resource.folder = "Dossier de la ressource (ou d'une catégorie [...])"
+side.resource.pick = "Choisir le dossier de la ressource"
+path.none = "Aucun dossier sélectionné"
+
+# Side panel: settings
+side.settings.title = "Réglages"
+side.settings.custom = "Réglages personnalisés"
+side.settings.default = "Par défaut"
+
+# Side panel: output
+side.output.title = "Sortie"
+side.output.export = "Exporter"
+side.output.export_hint = "Nouvelle ressource optimisée, l'originale reste intacte"
+side.output.export_pick = "Choisir le dossier d'export"
+side.output.overwrite = "Écraser si le dossier existe déjà"
+side.output.in_place = "Modifier sur place"
+side.output.in_place_hint = "Remplace les fichiers du dossier source"
+side.output.in_place_warning = "Sans sauvegarde : les fichiers d'origine sont remplacés."
+side.output.no_export_dir = "Choisis un dossier d'export."
+
+# Side panel: actions
+side.analyse = "Analyser"
+side.compare_hint = "Comparer avant / après le fichier sélectionné dans l'analyse"
+side.optimise_all = "Optimiser toute la ressource"
+
+# Files still to fix after an optimisation
+remaining.failed = "échec de l'optimisation : {error}"
+remaining.unreadable = "fichier produit illisible : {error}"
+
+# Tabs
+tabs.analysis = "Analyse"
+tabs.comparison = "Comparaison"
+tabs.report = "Rapport"
+
+# Analysis tab
+analysis.empty.title = "Aucune analyse"
+analysis.empty.hint = "Choisis le dossier de la ressource puis lance « Analyser »."
+analysis.stat.files = "Fichiers"
+analysis.stat.to_optimise = "À optimiser"
+analysis.stat.fivem = "> 16 Mio (FiveM)"
+analysis.settings_changed = "Les réglages ont changé depuis l'analyse : relance « Analyser » pour mettre à jour."
+analysis.only_problems = "Seulement les fichiers à optimiser"
+analysis.filter = "Filtrer par nom…"
+analysis.clear = "Vider"
+analysis.clear_hint = "Décocher tous les fichiers"
+analysis.toggle_all = "Cocher / décocher les fichiers affichés"
+analysis.col.file = "Fichier"
+analysis.col.type = "Type"
+analysis.col.physical = "Physique"
+analysis.col.virtual = "Virtuelle"
+analysis.col.summary = "Résumé"
+analysis.compliant = "Conforme"
+analysis.issue_count = "{count} point(s) à corriger"
+analysis.nothing = "Rien à signaler."
+
+# Comparison tab
+comparison.empty.title = "Aucune comparaison"
+comparison.empty.hint = "Sélectionne un fichier dans l'analyse puis « Comparer avant / après »."
+comparison.optimise_hint = "Applique les réglages actuels à ce seul fichier (selon la sortie choisie)"
+comparison.add_to_selection = "Ajouter à la sélection"
+comparison.wireframe = "Fil de fer"
+comparison.alpha = "Alpha"
+comparison.alpha_hint = "Sinon seules les couleurs RVB sont affichées (l'alpha des spéculaires = brillance)."
+comparison.dry_run = "Réglages actuels appliqués ; rien n'est écrit sur le disque."
+comparison.nothing.title = "Rien à comparer"
+comparison.nothing.hint = "Ce fichier ne contient ni maillage ni texture modifiable."
+comparison.before = "Avant"
+comparison.after = "Après"
+comparison.unchanged = "Inchangé"
+
+# Report tab
+report.empty.title = "Aucun rapport"
+report.empty.hint = "Le rapport apparaît ici après « Optimiser »."
+report.stat.optimised = "Optimisés"
+report.stat.errors = "Erreurs"
+report.stat.disk = "Disque"
+report.stat.fivem = "> 16 Mio"
+report.open = "Ouvrir"
+report.save = "Enregistrer le rapport"
+report.file_name = "optistream-rapport.txt"
+report.by_resource = "Par ressource ({count})"
+report.col.resource = "Ressource"
+report.root = "(racine)"
+report.incomplete = "Export incomplet : {count} fichier(s) non écrit(s)"
+report.incomplete_hint = "L'optimisation a été interrompue. Ne mets pas cette ressource en production telle quelle."
+report.complete_export = "Compléter l'export"
+report.complete_export_hint = "Écrit uniquement les fichiers manquants dans la destination"
+report.cancelled = "Optimisation annulée : seule une partie des fichiers a été traitée."
+report.no_remaining = "Aucun avertissement restant sur les fichiers optimisés."
+report.to_review = "À revoir ({count})"
+report.reoptimise_all = "Tout ré-optimiser"
+report.reoptimise_all_hint = "Relance ces fichiers avec les réglages actuels"
+report.review_hint = "Ajuste les réglages à gauche (tolérance, tailles…), compare, puis relance fichier par fichier."
+report.details = "Détail des modifications"
+report.file_error = "{name} : {error}"

@@ -7,6 +7,8 @@ mod report;
 use eframe::egui::{self, RichText, Stroke, Ui, Vec2};
 use egui_material_icons::icons::*;
 
+use optistream_i18n::t;
+
 use crate::app::{App, Tab};
 use crate::theme::{self, ACCENT, BORDER, WEAK};
 
@@ -14,9 +16,9 @@ impl App {
     pub(super) fn tab_bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             for (tab, ic, title) in [
-                (Tab::Analysis, ICON_TABLE_CHART, "Analyse"),
-                (Tab::Comparison, ICON_COMPARE, "Comparaison"),
-                (Tab::Report, ICON_DESCRIPTION, "Rapport"),
+                (Tab::Analysis, ICON_TABLE_CHART, t("app.tabs.analysis")),
+                (Tab::Comparison, ICON_COMPARE, t("app.tabs.comparison")),
+                (Tab::Report, ICON_DESCRIPTION, t("app.tabs.report")),
             ] {
                 let on = self.tab == tab;
                 let text = RichText::new(theme::label(ic, title)).size(15.0).color(if on { ACCENT } else { WEAK });

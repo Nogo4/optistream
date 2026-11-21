@@ -1,0 +1,42 @@
+# core messages (en). Keys are looked up as "core.<key>".
+
+# Size units
+size.mib = "{size} MiB"
+
+# Analysis notes added by the pipeline
+analysis.skipped = " — ignored with the current settings"
+analysis.physical_over = "declared physical memory {size} (FiveM warns above 16 MiB){skipped}"
+analysis.virtual_over = "declared virtual memory {size} (> 16 MiB){skipped}"
+
+# Errors
+error.internal_crash = "internal crash: {msg}"
+error.unknown_cause = "unknown cause"
+error.export_is_source = "the export folder cannot be the source folder itself"
+error.export_inside_source = "the export folder cannot be inside the source resource"
+error.export_not_empty = "the folder {path} already exists and is not empty"
+error.writing = "writing {path}"
+error.replacing = "replacing {path}"
+error.copying = "copying {path}"
+
+# Text report
+report.header = "OptiStream — {method}"
+report.source = "Source      : {path}"
+report.destination = "Destination : {path}{in_place}"
+report.in_place = " (in-place modification)"
+report.duration = "Duration    : {seconds} s{cancelled}"
+report.cancelled = " (cancelled)"
+report.files = "Files processed: {processed}, optimised: {optimized}, errors: {errors}, other files copied: {copied}"
+report.disk = "Disk            : {before} → {after}"
+report.physical = "Physical memory : {before} → {after}"
+report.virtual = "Virtual memory  : {before} → {after}"
+report.warnings = "Files > 16 MiB (FiveM warning): {before} → {after}"
+report.not_written = "WARNING: {count} file(s) not written, the destination is incomplete:"
+report.by_resource = "Per resource (> 16 MiB before → after, physical memory):"
+report.root = "(root)"
+report.resource_line = "{name}: {warnings_before} → {warnings_after}, {before} → {after}, {optimized} optimised{errors}"
+report.resource_errors = ", {count} error(s)"
+report.resource_checks = "Resource checks:"
+report.detail = "Detail:"
+report.file_error = "- {path}: ERROR {error}"
+report.file_line = "- {path}: physical {before} → {after}{virt}, disk {disk_before} → {disk_after}"
+report.file_virtual = ", virtual {before} → {after}"

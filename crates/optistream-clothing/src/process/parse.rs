@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::{ensure, Result};
+use optistream_i18n::tf;
 use optistream_rage::texture::{self as rtex, TextureEntry};
 use optistream_rage::{drawable, Resource};
 use optistream_texture::{resource as texres, TextureRole};
@@ -91,8 +92,7 @@ pub fn crop_ready(kind: Kind, bytes: &[u8]) -> Result<Parsed> {
                 let o = &p.textures[u].entry;
                 (o.width, o.height, o.format, o.levels) == (e.width, e.height, e.format, e.levels)
             }),
-            "texture {} : données partagées par des en-têtes différents",
-            e.name
+            tf!("clothing.error.shared_data", name = e.name)
         );
     }
     Ok(p)

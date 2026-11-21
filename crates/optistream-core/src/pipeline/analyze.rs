@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use std::fs;
 
 use anyhow::Result;
+use optistream_i18n::{t, tf};
 use rayon::prelude::*;
 use serde::Serialize;
 
@@ -70,13 +71,13 @@ pub fn analyze(
                     let mut a = guarded(|| method.analyze_file(ctx, &data, settings))?;
                     // A file the settings leave untouched only gets informational size notes:
                     // it must not show up as something left to fix.
-                    let skipped = a.skipped.then_some(" — ignoré avec les réglages actuels").unwrap_or("");
+                    let skipped = if a.skipped { t("core.analysis.skipped") } else { "" };
                     if size.graphics > FIVEM_WARN_BYTES {
-                        let text = format!("mémoire physique déclarée {} (FiveM avertit au-delà de 16 Mio){skipped}", mib(size.graphics));
+                        let text = tf!("core.analysis.physical_over", size = mib(size.graphics), skipped = skipped);
                         a.issues.insert(0, if a.skipped { Issue::info(text) } else { Issue::error(text) });
                     }
                     if size.system > FIVEM_WARN_BYTES {
-                        let text = format!("mémoire virtuelle déclarée {} (> 16 Mio){skipped}", mib(size.system));
+                        let text = tf!("core.analysis.virtual_over", size = mib(size.system), skipped = skipped);
                         a.issues.insert(0, if a.skipped { Issue::info(text) } else { Issue::warning(text) });
                     }
                     Ok((size, a))

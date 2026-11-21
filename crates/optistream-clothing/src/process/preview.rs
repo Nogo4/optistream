@@ -1,6 +1,7 @@
 //! Before/after previews of textures and LOD meshes.
 
 use anyhow::Result;
+use optistream_i18n::{self as i18n, tf};
 use optistream_core::{PreviewContent, PreviewImage, PreviewItem, PreviewMesh};
 use optistream_mesh::Decimated;
 use optistream_rage::drawable::{self, GeometryInfo};
@@ -12,7 +13,7 @@ use crate::config::Config;
 use crate::process::analyze::has_cloth;
 use crate::process::meshes::{decimate_lod, read_geometry, shared_vertex_buffers};
 use crate::process::parse::role_of;
-use crate::process::textures::optimize_texture;
+use crate::process::textures::{is_crop_change, optimize_texture};
 use crate::process::{group, parse, FileInfo, Kind};
 
 fn preview_image(img: &Rgba8) -> PreviewImage {
@@ -21,7 +22,14 @@ fn preview_image(img: &Rgba8) -> PreviewImage {
 }
 
 fn tex_desc(w: u32, h: u32, format: u32, levels: u32, bytes: usize) -> String {
-    format!("{w}×{h} {} · {levels} mips · {:.2} Mio", fmt::name(format), bytes as f64 / 1048576.0)
+    tf!(
+        "clothing.preview.texture_desc",
+        width = w,
+        height = h,
+        format = fmt::name(format),
+        levels = levels,
+        size = format!("{:.2}", bytes as f64 / 1048576.0)
+    )
 }
 
 fn lod_mesh(res: &Resource, geoms: &[GeometryInfo], replaced: Option<&[Option<Decimated>]>) -> Result<PreviewMesh> {
@@ -63,22 +71,26 @@ pub fn preview(kind: Kind, bytes: &[u8], cfg: &Config, info: &FileInfo) -> Resul
             let cloth = cloth_file || has_cloth(d);
             let budget = cfg.budget_for_slot(slot);
             let (after, after_desc) = if cloth {
-                (None, "cloth : non modifié".to_owned())
+                (None, i18n::t("clothing.preview.cloth_unchanged").to_owned())
             } else if !cfg.mesh_enabled || d.lod_triangles(0) <= budget {
-                (None, "dans le budget : non modifié".to_owned())
+                (None, i18n::t("clothing.preview.within_budget").to_owned())
             } else {
                 let plan = decimate_lod(&p.res, d, geoms, &shared, budget, cfg.max_error)?;
                 let m = lod_mesh(&p.res, geoms, Some(&plan))?;
-                let desc = format!("{} triangles", group(m.triangles() as u64));
+                let desc = tf!("clothing.preview.triangles", triangles = group(m.triangles() as u64));
                 (Some(m), desc)
             };
             items.push(PreviewItem {
                 title: if p.drawables.len() > 1 {
-                    format!("Maillage #{di} — LOD High")
+                    tf!("clothing.preview.mesh_title_indexed", index = di)
                 } else {
-                    "Maillage — LOD High".to_owned()
+                    i18n::t("clothing.preview.mesh_title").to_owned()
                 },
-                before_desc: format!("{} triangles · {} vertices", group(before.triangles() as u64), group(d.lod_vertices(0))),
+                before_desc: tf!(
+                    "clothing.preview.mesh_desc",
+                    triangles = group(before.triangles() as u64),
+                    vertices = group(d.lod_vertices(0))
+                ),
                 after_desc,
                 content: PreviewContent::Mesh { before, after },
             });
@@ -95,23 +107,23 @@ pub fn preview(kind: Kind, bytes: &[u8], cfg: &Config, info: &FileInfo) -> Resul
         };
         let before_desc = tex_desc(meta.width, meta.height, meta.format, meta.levels, t.data_len);
         let (after, after_desc) = match role_of(t.usage) {
-            None => (None, "protégée : non modifiée".to_owned()),
+            None => (None, i18n::t("clothing.preview.protected_unchanged").to_owned()),
             Some(_) => match optimize_texture(t, data, cfg, info.skin, info.crop.as_ref())? {
                 Some(enc) => {
                     let m = TextureMeta { width: enc.width, height: enc.height, format: enc.format, levels: enc.levels };
                     let img = plan::decode_top(&m, &enc.data)?;
                     let mut desc = tex_desc(enc.width, enc.height, enc.format, enc.levels, enc.data.len());
-                    if let Some(c) = enc.changes.first().filter(|c| c.starts_with("recadrée")) {
+                    if let Some(c) = enc.changes.first().filter(|c| is_crop_change(c)) {
                         desc = format!("{desc} · {c}");
                     }
                     (Some(preview_image(&img)), desc)
                 }
-                None => (None, "déjà conforme : non modifiée".to_owned()),
+                None => (None, i18n::t("clothing.preview.already_compliant").to_owned()),
             },
         };
-        let role = role_of(t.usage).map(|r| r.label()).unwrap_or("protégée");
+        let role = role_of(t.usage).map(|r| r.label()).unwrap_or(i18n::t("clothing.preview.protected"));
         items.push(PreviewItem {
-            title: format!("Texture {} ({role})", t.entry.name),
+            title: tf!("clothing.preview.texture_title", name = t.entry.name, role = role),
             before_desc,
             after_desc,
             content: PreviewContent::Texture { before: preview_image(&before), after },

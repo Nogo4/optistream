@@ -1,0 +1,104 @@
+# vehicle messages (en). Keys are looked up as "vehicle.<key>".
+
+# ---------------------------------------------------------------- method
+method.label = "Vehicles"
+method.description = "Vehicles: textures (.ytd, and embedded in .yft / .ydr / .ydd). Liveries and big textures reduced first, small parts kept. Accepts one resource or a whole category folder ([oren-vehicles])."
+
+# ---------------------------------------------------------------- parameters
+group.general = "General"
+group.textures = "Textures"
+group.budget = "Targeted reduction"
+group.geometry = "Geometry"
+unit.mib = "MiB"
+
+param.min_physical.label = "Minimum physical memory"
+param.min_physical.help = "Only files whose declared physical memory exceeds this value are optimised; 16 MiB is the FiveM warning threshold. 0: every file."
+param.convert.label = "Convert BC7 / DXT3 / uncompressed"
+param.convert.help = "Normal maps → DXT5; others → DXT1, or DXT5 if the alpha is actually used. DXT1 / DXT5 keep their format."
+param.force_pot.label = "Force powers of 2"
+param.force_pot.help = "Rounded down: 3000×3000 → 2048×2048, etc."
+param.fix_mips.label = "Complete the mipmaps"
+param.fix_mips.help = "Full chain down to 4 px, like the base game."
+param.budget_enabled.label = "Reduce down to the budget"
+param.budget_enabled.help = "If the file is still over the budget after the corrections, the big textures (liveries, body sheets ≥ 1024 px, textures with a copy in the +hi.ytd) are halved, those that lose the least first, until it fits under the budget."
+param.budget.label = "Budget"
+param.budget.help = "Target physical memory per file. 16 MiB: no more FiveM warning."
+param.small.label = "Reduce small textures too"
+param.small.help = "After the big textures, textures under 1024 px (parts, interior) may also be reduced, within the limits below."
+param.max_steps.label = "Max halvings per texture"
+param.max_steps.help = "1 halving = width and height ÷ 2 (memory ÷ 4)."
+param.min_size.label = "Minimum size"
+param.min_size.help = "A texture is never reduced below this size (smaller side). Liveries never go below 1024 px."
+param.max_loss.label = "Maximum loss"
+param.max_loss.help = "Average difference tolerated between the reduced texture and the original, in % of the black → white range. For reference: a livery 2048 → 1024 ≈ 2.4 %. A texture that would lose more is not reduced."
+param.force.label = "Force under budget"
+param.force.help = "If the limits above are not enough, the reduction goes on past them (unlimited loss, 3 halvings, never below 256 px nor below 1024 px for a livery); lights, sirens and glass (name) go last. Emissives and palettes are never reduced."
+param.geo_enabled.label = "Reduce the geometry above the budget"
+param.geo_enabled.help = "If the virtual memory of a model (.yft, .ydr) exceeds the budget, its polygons are reduced until it fits under it: far LODs first (VLow, Low, Med), the High LOD only if that is not enough. Edges, seams, moving parts and skinning are preserved; collision and physics are never touched."
+param.geo_high_floor.label = "High LOD: minimum triangles kept"
+param.geo_high_floor.help = "The High LOD (seen up close) is never reduced below this share of its triangles."
+param.geo_high_error.label = "High LOD: deformation tolerance"
+param.geo_high_error.help = "Maximum deviation tolerated on the High LOD, in % of the part's size. Far LODs tolerate 2 to 5 %."
+
+# ---------------------------------------------------------------- presets
+preset.light.label = "Light"
+preset.light.description = "Textures: conversion, power of 2, mipmaps. No size or geometry reduction."
+preset.balanced.label = "Balanced"
+preset.balanced.description = "Like Light, then reduction of the big textures only (liveries, ≥ 1024 px, +hi.ytd copies) down to 16 MiB: 1 halving, low loss. Geometry above 16 MiB: far LODs, High kept at 80 % at least."
+preset.strong.label = "Strong"
+preset.strong.description = "Deeper reduction (small textures included, 2 halvings, medium loss); if that is not enough, forced reduction down to 16 MiB, never below 256 px nor below 1024 px for a livery. Geometry: High kept at 60 % at least."
+
+# ---------------------------------------------------------------- skipped files
+skip.encrypted = "encrypted (FXAP): unreadable, left as is"
+skip.unknown_format = "unknown format (not an RSC7)"
+skip.below_min_physical = "physical (and virtual) memory ≤ {mib} MiB, threshold « Minimum physical memory »"
+skip.summary = "skipped ({reason})"
+skip.preview = "file skipped ({reason}): nothing to compare."
+resources.detected = "{count} resources detected in the folder: each one is processed separately"
+
+# ---------------------------------------------------------------- texture labels
+class.hi_copy = "+hi copy"
+class.last = "lights / glass"
+class.livery = "livery"
+class.big = "big"
+class.small = "small"
+tex.protected = "protected"
+
+# ---------------------------------------------------------------- analysis
+issue.not_pot = "not a power of 2"
+issue.format = "format {format}"
+issue.uncompressed = "uncompressed ({format})"
+issue.no_mips = "no mipmaps"
+issue.incomplete_mips = "incomplete mipmaps ({levels}/{full})"
+issue.texture = "texture {name} ({label}): {problems}"
+issue.unsupported_format = "texture {name} ({role}): format {format} not supported, left as is"
+issue.over_budget = "over the budget of {budget}: targeted reduction, big textures first (liveries, ≥ 1024 px, +hi copies)"
+issue.liveries = "{liveries} livery(ies) (never below 1024 px), {hi} texture(s) with a copy in the +hi.ytd"
+issue.protected = "{count} protected texture(s) (emissive, palette, lookup…): not modified"
+issue.virtual_over_budget = "virtual memory {virt} over the budget of {budget} (High / Med / Low / VLow triangles: {lods})"
+issue.geo_reduced = "{text}: geometry reduced, far LODs first"
+issue.geo_disabled = "{text}: geometry reduction disabled"
+summary.textures = "{count} texture(s), max {max} px"
+summary.no_textures = "no textures"
+summary.triangles = "{count} triangles (High)"
+
+# ---------------------------------------------------------------- targeted reduction
+hold.livery = "liveries at 1024 px (floor)"
+hold.lights = "lights / sirens / glass (name)"
+hold.small = "small textures kept (preset)"
+change.texture = "texture {name} ({label}): {changes}"
+change.reduction = "targeted reduction ÷{factor} (loss {loss} %)"
+change.forced = "forced"
+change.repacked = "graphics pages repacked"
+
+# ---------------------------------------------------------------- optimisation
+warn.textures_heavier = "textures not modified: the result ({after}) would be heavier than the original ({before})"
+warn.geometry_unchanged = "geometry not modified: {error}"
+error.verify = "check after writing failed"
+error.verify_geometries = "check after writing failed (geometries)"
+
+# ---------------------------------------------------------------- preview
+preview.title = "Texture {name} ({label})"
+preview.texture_desc = "{width}×{height} {format} · {levels} mips · {size} MiB"
+preview.protected = "protected: not modified"
+preview.unchanged = "not modified"

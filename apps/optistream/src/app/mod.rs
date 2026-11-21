@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use eframe::egui::{self, Margin, Ui};
 use optistream_core::{Analysis, Method, Report, Settings};
+use optistream_i18n::{t, Lang};
 use serde::{Deserialize, Serialize};
 
 use crate::app::preview::LoadedPreview;
@@ -43,6 +44,9 @@ struct Saved {
     output: OutputMode,
     overwrite: bool,
     settings: Settings,
+    /// Interface language (`Lang::code()`); absent from older saves.
+    #[serde(default)]
+    lang: Option<String>,
 }
 
 pub struct App {
@@ -88,6 +92,10 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::apply(&cc.egui_ctx);
+        let saved = cc.storage.and_then(|s| eframe::get_value::<Saved>(s, eframe::APP_KEY));
+        // The language comes first: everything below may build text.
+        let lang = saved.as_ref().and_then(|s| s.lang.as_deref()).and_then(Lang::from_code);
+        optistream_i18n::set_lang(lang.unwrap_or_else(optistream_i18n::detect));
         let methods = registered_methods();
         let mut app = App {
             settings: methods[0].default_settings(),
@@ -99,7 +107,7 @@ impl App {
             overwrite: false,
             job: None,
             error: None,
-            status: "Prêt".to_owned(),
+            status: t("app.status.ready").to_owned(),
             tab: Tab::Analysis,
             analysis: None,
             analysis_settings: None,
@@ -119,7 +127,7 @@ impl App {
             confirm_close: false,
             allow_close: false,
         };
-        if let Some(saved) = cc.storage.and_then(|s| eframe::get_value::<Saved>(s, eframe::APP_KEY)) {
+        if let Some(saved) = saved {
             if let Some(i) = app.methods.iter().position(|m| m.id() == saved.method) {
                 app.method = i;
             }
@@ -189,6 +197,7 @@ impl eframe::App for App {
             output: self.output,
             overwrite: self.overwrite,
             settings: self.settings.clone(),
+            lang: Some(optistream_i18n::lang().code().to_owned()),
         };
         eframe::set_value(storage, eframe::APP_KEY, &saved);
     }

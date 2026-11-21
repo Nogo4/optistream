@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use eframe::egui;
 use optistream_core::{mib, Analysis, Output};
+use optistream_i18n::{t, tf};
 
 use crate::app::preview::load_preview;
 use crate::app::state::{merge_report, remaining_entry};
@@ -21,7 +22,7 @@ impl App {
         self.job = None;
         match result {
             Ok(JobResult::Analysis { analysis, partial }) => {
-                self.status = format!("Analyse terminée : {} fichier(s)", analysis.files.len());
+                self.status = tf!("app.status.analysis_done", count = analysis.files.len());
                 if partial {
                     self.merge_analysis(analysis);
                 } else {
@@ -33,13 +34,13 @@ impl App {
             }
             Ok(JobResult::Report { report, verification, selection }) => {
                 let partial = selection.is_some();
-                let t = report.totals();
-                self.status = format!(
-                    "Optimisation terminée : {} / {} fichier(s) optimisé(s), mémoire physique {} → {}",
-                    t.optimized,
-                    t.processed,
-                    mib(t.graphics_before),
-                    mib(t.graphics_after)
+                let totals = report.totals();
+                self.status = tf!(
+                    "app.status.optimisation_done",
+                    optimised = totals.optimized,
+                    processed = totals.processed,
+                    before = mib(totals.graphics_before),
+                    after = mib(totals.graphics_after),
                 );
                 // What is left to fix in the files that were just written.
                 let same_target = self.report.as_ref().is_some_and(|r| r.destination == report.destination);
@@ -73,7 +74,7 @@ impl App {
                 self.tab = Tab::Report;
             }
             Ok(JobResult::Preview(file, items)) => {
-                self.status = "Comparaison prête".to_owned();
+                self.status = t("app.status.comparison_ready").to_owned();
                 self.preview_file = Some(file);
                 self.previews = items
                     .into_iter()
@@ -83,7 +84,7 @@ impl App {
                 self.tab = Tab::Comparison;
             }
             Err(e) => {
-                self.status = "Erreur".to_owned();
+                self.status = t("app.common.error").to_owned();
                 self.error = Some(e);
             }
         }
@@ -127,7 +128,7 @@ impl App {
             OutputMode::Export => match &self.export_dir {
                 Some(d) => Output::Export { dir: d.clone(), overwrite: self.overwrite },
                 None => {
-                    self.error = Some("Choisis un dossier d'export.".into());
+                    self.error = Some(t("app.side.output.no_export_dir").into());
                     return;
                 }
             },

@@ -172,7 +172,7 @@ pub fn path_field(ui: &mut Ui, path: &mut Option<std::path::PathBuf>, title: &st
                 ui.set_width(field_width - 18.0);
                 let (text, color) = match path {
                     Some(p) => (p.display().to_string(), TEXT),
-                    None => ("Aucun dossier sélectionné".to_owned(), WEAK),
+                    None => (optistream_i18n::t("app.path.none").to_owned(), WEAK),
                 };
                 ui.add(egui::Label::new(RichText::new(&text).color(color).small()).truncate())
                     .on_hover_text(text);

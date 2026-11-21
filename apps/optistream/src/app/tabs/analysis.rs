@@ -8,6 +8,7 @@ use egui_extras::{Column, TableBuilder};
 use egui_material_icons::icons::*;
 use optistream_core::pipeline::FIVEM_WARN_BYTES;
 use optistream_core::mib;
+use optistream_i18n::{t, tf};
 
 use crate::app::App;
 use crate::theme::{self, ACCENT, BORDER, CARD, ERR, TEXT, WARN, WEAK};
@@ -18,8 +19,8 @@ impl App {
             theme::empty_state(
                 ui,
                 ICON_TABLE_CHART,
-                "Aucune analyse",
-                "Choisis le dossier de la ressource puis lance « Analyser ».",
+                t("app.analysis.empty.title"),
+                t("app.analysis.empty.hint"),
             );
             return;
         };
@@ -31,14 +32,14 @@ impl App {
             .count();
         let gfx: u64 = a.files.iter().map(|f| f.size.graphics).sum();
         ui.horizontal_top(|ui| {
-            theme::stat(ui, ICON_FOLDER, "Fichiers", a.files.len().to_string(), WEAK);
-            theme::stat(ui, ICON_CHECKLIST, "À optimiser", with_issues.to_string(), WARN);
-            theme::stat(ui, ICON_WARNING, "> 16 Mio (FiveM)", warned.to_string(), if warned > 0 { ERR } else { ACCENT });
-            theme::stat(ui, ICON_MEMORY, "Mémoire physique", mib(gfx), ACCENT);
+            theme::stat(ui, ICON_FOLDER, t("app.analysis.stat.files"), a.files.len().to_string(), WEAK);
+            theme::stat(ui, ICON_CHECKLIST, t("app.analysis.stat.to_optimise"), with_issues.to_string(), WARN);
+            theme::stat(ui, ICON_WARNING, t("app.analysis.stat.fivem"), warned.to_string(), if warned > 0 { ERR } else { ACCENT });
+            theme::stat(ui, ICON_MEMORY, t("app.common.physical_memory"), mib(gfx), ACCENT);
         });
         ui.add_space(6.0);
         if self.analysis_settings.as_ref() != Some(&self.settings) {
-            theme::icon_line(ui, ICON_INFO, WARN, "Les réglages ont changé depuis l'analyse : relance « Analyser » pour mettre à jour.");
+            theme::icon_line(ui, ICON_INFO, WARN, t("app.analysis.settings_changed"));
         }
         for i in &a.resource_issues {
             let (ic, c) = theme::severity_icon(i.severity);
@@ -61,18 +62,18 @@ impl App {
 
         let mut optimize_now: Option<HashSet<PathBuf>> = None;
         ui.horizontal(|ui| {
-            ui.checkbox(&mut self.only_problems, "Seulement les fichiers à optimiser");
+            ui.checkbox(&mut self.only_problems, t("app.analysis.only_problems"));
             ui.add_space(12.0);
             ui.label(theme::icon(ICON_FILTER_LIST, 18.0, WEAK));
-            ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Filtrer par nom…").desired_width(240.0));
+            ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text(t("app.analysis.filter")).desired_width(240.0));
             if !self.checked.is_empty() {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let b = egui::Button::new(RichText::new(theme::label(ICON_BOLT, &format!("Optimiser la sélection ({})", self.checked.len()))).color(theme::ACCENT_TEXT).strong())
+                    let b = egui::Button::new(RichText::new(theme::label(ICON_BOLT, &tf!("app.common.optimise_selection", count = self.checked.len()))).color(theme::ACCENT_TEXT).strong())
                         .fill(ACCENT);
                     if ui.add_enabled(self.job.is_none(), b).clicked() {
                         optimize_now = Some(self.checked.clone());
                     }
-                    if ui.button(theme::label(ICON_CLOSE, "Vider")).on_hover_text("Décocher tous les fichiers").clicked() {
+                    if ui.button(theme::label(ICON_CLOSE, t("app.analysis.clear"))).on_hover_text(t("app.analysis.clear_hint")).clicked() {
                         self.checked.clear();
                     }
                 });
@@ -99,13 +100,21 @@ impl App {
             .header(24.0, |mut h| {
                 h.col(|ui| {
                     let mut v = all_checked;
-                    if ui.checkbox(&mut v, "").on_hover_text("Cocher / décocher les fichiers affichés").changed() {
+                    if ui.checkbox(&mut v, "").on_hover_text(t("app.analysis.toggle_all")).changed() {
                         toggle_all = Some(v);
                     }
                 });
-                for t in ["", "Fichier", "Type", "Physique", "Virtuelle", "Résumé"] {
+                let columns = [
+                    "",
+                    t("app.analysis.col.file"),
+                    t("app.analysis.col.type"),
+                    t("app.analysis.col.physical"),
+                    t("app.analysis.col.virtual"),
+                    t("app.analysis.col.summary"),
+                ];
+                for title in columns {
                     h.col(|ui| {
-                        ui.label(RichText::new(t).small().strong().color(WEAK));
+                        ui.label(RichText::new(title).small().strong().color(WEAK));
                     });
                 }
             })
@@ -134,8 +143,8 @@ impl App {
                             None => (ICON_CHECK_CIRCLE, ACCENT),
                         };
                         ui.label(theme::icon(ic, 17.0, c)).on_hover_text(match count {
-                            0 => "Conforme".to_owned(),
-                            n => format!("{n} point(s) à corriger"),
+                            0 => t("app.analysis.compliant").to_owned(),
+                            n => tf!("app.analysis.issue_count", count = n),
                         });
                     });
                     row.col(|ui| {
@@ -187,13 +196,13 @@ impl App {
                         ui.set_width(ui.available_width());
                         ui.horizontal(|ui| {
                             if ui
-                                .add_enabled(self.job.is_none(), egui::Button::new(theme::label(ICON_COMPARE, "Comparer avant / après")))
+                                .add_enabled(self.job.is_none(), egui::Button::new(theme::label(ICON_COMPARE, t("app.common.compare_before_after"))))
                                 .clicked()
                             {
                                 compare = Some(f.rel.clone());
                             }
                             if ui
-                                .add_enabled(self.job.is_none(), egui::Button::new(theme::label(ICON_BOLT, "Optimiser ce fichier")))
+                                .add_enabled(self.job.is_none(), egui::Button::new(theme::label(ICON_BOLT, t("app.common.optimise_file"))))
                                 .clicked()
                             {
                                 optimize_now = Some(HashSet::from([f.rel.clone()]));
@@ -202,7 +211,7 @@ impl App {
                         });
                         ui.add_space(4.0);
                         egui::ScrollArea::vertical().id_salt("issues").max_height(120.0).show(ui, |ui| match &f.analysis {
-                            Ok(x) if x.issues.is_empty() => theme::icon_line(ui, ICON_CHECK_CIRCLE, ACCENT, "Rien à signaler."),
+                            Ok(x) if x.issues.is_empty() => theme::icon_line(ui, ICON_CHECK_CIRCLE, ACCENT, t("app.analysis.nothing")),
                             Ok(x) => {
                                 for i in &x.issues {
                                     let (ic, c) = theme::severity_icon(i.severity);

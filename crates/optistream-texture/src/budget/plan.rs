@@ -1,6 +1,7 @@
 //! The reduction plan of one file.
 
 use anyhow::Result;
+use optistream_i18n::{t, tf};
 use optistream_rage::gfx;
 use optistream_rage::Resource;
 use rayon::prelude::*;
@@ -70,7 +71,7 @@ pub fn plan_file(res: &Resource, raw: &[(usize, usize)], textures: &[BudgetTex],
     if alt.physical_after < fp.physical_after {
         alt.warnings.insert(
             0,
-            format!("mipmaps manquants non complétés : la mémoire serait passée de {} à {}", mib(before), mib(fp.physical_after)),
+            tf!("texture.budget.mips_not_completed", before = mib(before), after = mib(fp.physical_after)),
         );
         return Ok(alt);
     }
@@ -112,7 +113,7 @@ fn plan_with(res: &Resource, raw: &[(usize, usize)], textures: &[BudgetTex], lim
         let Some(role) = role_of(i) else { return Ok(None) };
         let t = &textures[blocks[i].1[0]];
         plan::optimize(&t.meta(), original(i), role, &limits.texture_policy(steps))
-            .map_err(|e| anyhow::anyhow!("texture {} : {e:#}", t.entry.name))
+            .map_err(|e| anyhow::anyhow!(tf!("texture.budget.texture_error", name = t.entry.name, error = format!("{e:#}"))))
     };
     let fix_mips = limits.policy.fix_mips;
 
@@ -254,23 +255,23 @@ fn plan_with(res: &Resource, raw: &[(usize, usize)], textures: &[BudgetTex], lim
             }
             let mut why = Vec::new();
             for (bytes, label) in
-                [(blocked.loss, "perte maximale atteinte"), (blocked.min_size, "à la taille minimale"), (blocked.max_steps, "divisions max atteintes")]
+                [(blocked.loss, "texture.budget.blocked_loss"), (blocked.min_size, "texture.budget.blocked_min_size"), (blocked.max_steps, "texture.budget.blocked_max_steps")]
             {
                 if bytes > 0 {
-                    why.push(format!("{label} : {}", mib(bytes)));
+                    why.push(tf!("texture.budget.reason", label = t(label), size = mib(bytes)));
                 }
             }
             blocked.holds.sort_by_key(|(h, _)| h.rank);
             for (h, bytes) in &blocked.holds {
                 if *bytes > 0 {
-                    why.push(format!("{} : {}", h.label, mib(*bytes)));
+                    why.push(tf!("texture.budget.reason", label = t(h.label), size = mib(*bytes)));
                 }
             }
-            warnings.push(format!(
-                "reste à {} (budget {}) : limites atteintes, textures restantes — {}",
-                mib(physical),
-                mib(limits.budget),
-                why.join(", ")
+            warnings.push(tf!(
+                "texture.budget.over_budget",
+                size = mib(physical),
+                budget = mib(limits.budget),
+                reasons = why.join(", ")
             ));
         }
     }

@@ -6,6 +6,7 @@ use std::time::Instant;
 use std::fs;
 
 use anyhow::{bail, Context, Result};
+use optistream_i18n::{t, tf};
 use rayon::prelude::*;
 
 use crate::method::{FileCtx, Method};
@@ -20,10 +21,10 @@ fn export_root(root: &Path, dir: &Path) -> Result<PathBuf> {
     let canon = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
     let (src, dst_parent) = (canon(root), canon(dir));
     if dst_parent.join(name) == src {
-        bail!("le dossier d'export ne peut pas être le dossier source lui-même");
+        bail!(t("core.error.export_is_source"));
     }
     if dst_parent.starts_with(&src) {
-        bail!("le dossier d'export ne peut pas se trouver à l'intérieur de la ressource source");
+        bail!(t("core.error.export_inside_source"));
     }
     Ok(dest)
 }
@@ -62,8 +63,8 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut name = path.file_name().context("file without a name")?.to_os_string();
     name.push(".optistream.tmp");
     let tmp = path.with_file_name(name);
-    fs::write(&tmp, bytes).with_context(|| format!("écriture de {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("remplacement de {}", path.display()))?;
+    fs::write(&tmp, bytes).with_context(|| tf!("core.error.writing", path = tmp.display()))?;
+    fs::rename(&tmp, path).with_context(|| tf!("core.error.replacing", path = path.display()))?;
     Ok(())
 }
 
@@ -90,7 +91,7 @@ pub fn optimize(
             let dest = export_root(root, dir)?;
             let exists = dest.exists() && fs::read_dir(&dest)?.next().is_some();
             if exists && only.is_none() && !overwrite {
-                bail!("le dossier {} existe déjà et n'est pas vide", dest.display());
+                bail!(tf!("core.error.export_not_empty", path = dest.display()));
             }
             (dest, false, exists && only.is_some())
         }
@@ -120,7 +121,7 @@ pub fn optimize(
                 fs::create_dir_all(parent)?;
             }
             fs::copy(root.join(&ctx.rel), &dst)
-                .with_context(|| format!("copie de {}", ctx.rel.display()))?;
+                .with_context(|| tf!("core.error.copying", path = ctx.rel.display()))?;
             copied += 1;
             progress.step(&ctx.rel);
         }

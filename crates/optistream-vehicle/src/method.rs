@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::Result;
 use optistream_core::{FileAnalysis, FileCtx, FileOutcome, Issue, MANIFESTS, Method, ParamSpec, Preset, PreviewItem, Settings};
+use optistream_i18n::{t, tf};
 use optistream_rage::Resource;
 use rayon::prelude::*;
 
@@ -93,13 +94,13 @@ fn is_manifest(name: &str) -> bool {
 /// Why the settings or the file itself leave it untouched, if they do.
 fn skip_reason(cfg: &Config, data: &[u8]) -> Option<String> {
     if data.starts_with(b"FXAP") {
-        return Some("chiffré (FXAP) : illisible, laissé tel quel".to_owned());
+        return Some(t("vehicle.skip.encrypted").to_owned());
     }
     if !Resource::is_rsc7(data) {
-        return Some("format inconnu (pas un RSC7)".to_owned());
+        return Some(t("vehicle.skip.unknown_format").to_owned());
     }
     cfg.below_min_physical(data)
-        .then(|| format!("mémoire physique (et virtuelle) ≤ {} Mio, seuil « Mémoire physique minimale »", cfg.min_physical / (1024 * 1024)))
+        .then(|| tf!("vehicle.skip.below_min_physical", mib = cfg.min_physical / (1024 * 1024)))
 }
 
 fn kind_of(ctx: &FileCtx) -> Option<Kind> {
@@ -112,11 +113,11 @@ impl Method for VehicleMethod {
     }
 
     fn label(&self) -> &'static str {
-        "Véhicules"
+        t("vehicle.method.label")
     }
 
     fn description(&self) -> &'static str {
-        "Véhicules : textures (.ytd, et intégrées aux .yft / .ydr / .ydd). Livrées et grosses textures réduites d'abord, petites pièces conservées. Accepte une ressource ou un dossier de catégorie entier ([oren-vehicles])."
+        t("vehicle.method.description")
     }
 
     fn params(&self) -> Vec<ParamSpec> {
@@ -139,7 +140,7 @@ impl Method for VehicleMethod {
         let cfg = Config::from_settings(settings);
         let kind = kind_of(ctx).expect("handled file");
         if let Some(reason) = skip_reason(&cfg, data) {
-            return Ok(FileAnalysis { kind: kind.label().into(), summary: format!("ignoré ({reason})"), skipped: true, ..Default::default() });
+            return Ok(FileAnalysis { kind: kind.label().into(), summary: tf!("vehicle.skip.summary", reason = reason), skipped: true, ..Default::default() });
         }
         let p = process::parse(kind, data, &self.index_for(ctx), &file_info(ctx))?;
         Ok(process::analyze(&p, &cfg))
@@ -170,7 +171,7 @@ impl Method for VehicleMethod {
             .map(|f| f.rsplit_once('/').map(|(d, _)| d.to_owned()).unwrap_or_default())
             .collect();
         if resources.len() > 1 {
-            vec![Issue::info(format!("{} ressources détectées dans le dossier : chacune est traitée séparément", resources.len()))]
+            vec![Issue::info(tf!("vehicle.resources.detected", count = resources.len()))]
         } else {
             Vec::new()
         }
@@ -180,7 +181,7 @@ impl Method for VehicleMethod {
         let cfg = Config::from_settings(settings);
         let kind = kind_of(ctx).expect("handled file");
         if let Some(reason) = skip_reason(&cfg, data) {
-            anyhow::bail!("fichier ignoré ({reason}) : rien à comparer.");
+            anyhow::bail!(tf!("vehicle.skip.preview", reason = reason));
         }
         process::preview(kind, data, &cfg, &self.index_for(ctx), &file_info(ctx))
     }

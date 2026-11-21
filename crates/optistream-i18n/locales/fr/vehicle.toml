@@ -1,0 +1,104 @@
+# vehicle messages (fr). Keys are looked up as "vehicle.<key>".
+
+# ---------------------------------------------------------------- method
+method.label = "Véhicules"
+method.description = "Véhicules : textures (.ytd, et intégrées aux .yft / .ydr / .ydd). Livrées et grosses textures réduites d'abord, petites pièces conservées. Accepte une ressource ou un dossier de catégorie entier ([oren-vehicles])."
+
+# ---------------------------------------------------------------- parameters
+group.general = "Général"
+group.textures = "Textures"
+group.budget = "Réduction ciblée"
+group.geometry = "Géométrie"
+unit.mib = "Mio"
+
+param.min_physical.label = "Mémoire physique minimale"
+param.min_physical.help = "Seuls les fichiers dont la mémoire physique déclarée dépasse cette valeur sont optimisés ; 16 Mio est le seuil d'avertissement de FiveM. 0 : tous les fichiers."
+param.convert.label = "Convertir BC7 / DXT3 / non compressé"
+param.convert.help = "Normal maps → DXT5 ; autres → DXT1, ou DXT5 si l'alpha est réellement utilisé. Les DXT1 / DXT5 gardent leur format."
+param.force_pot.label = "Forcer les puissances de 2"
+param.force_pot.help = "Arrondi vers le bas : 3000×3000 → 2048×2048, etc."
+param.fix_mips.label = "Compléter les mipmaps"
+param.fix_mips.help = "Chaîne complète jusqu'à 4 px, comme le jeu de base."
+param.budget_enabled.label = "Réduire jusqu'au budget"
+param.budget_enabled.help = "Si le fichier dépasse encore le budget après les corrections, les grosses textures (livrées, feuilles de carrosserie ≥ 1024 px, textures qui ont une copie dans le +hi.ytd) sont divisées par 2, celles qui perdent le moins d'abord, jusqu'à passer sous le budget."
+param.budget.label = "Budget"
+param.budget.help = "Mémoire physique visée par fichier. 16 Mio : plus d'avertissement FiveM."
+param.small.label = "Réduire aussi les petites textures"
+param.small.help = "Après les grosses textures, les textures de moins de 1024 px (pièces, intérieur) peuvent aussi être réduites, dans les limites ci-dessous."
+param.max_steps.label = "Divisions max par texture"
+param.max_steps.help = "1 division = largeur et hauteur ÷ 2 (mémoire ÷ 4)."
+param.min_size.label = "Taille minimale"
+param.min_size.help = "Une texture n'est jamais réduite sous cette taille (petit côté). Les livrées ne descendent jamais sous 1024 px."
+param.max_loss.label = "Perte maximale"
+param.max_loss.help = "Écart moyen toléré entre la texture réduite et l'originale, en % de la plage noir → blanc. Repère : une livrée 2048 → 1024 ≈ 2,4 %. Une texture qui perdrait plus n'est pas réduite."
+param.force.label = "Forcer sous le budget"
+param.force.help = "Si les limites ci-dessus ne suffisent pas, la réduction continue au-delà (perte sans limite, 3 divisions, jamais sous 256 px ni sous 1024 px pour une livrée) ; les feux, gyrophares et vitres (nom) passent en dernier. Les émissives et palettes ne sont jamais réduites."
+param.geo_enabled.label = "Réduire la géométrie au-dessus du budget"
+param.geo_enabled.help = "Si la mémoire virtuelle d'un modèle (.yft, .ydr) dépasse le budget, ses polygones sont réduits jusqu'à passer dessous : LODs lointains d'abord (VLow, Low, Med), le LOD High seulement si ça ne suffit pas. Bords, coutures, pièces mobiles et skinning sont préservés ; la collision et la physique ne sont jamais touchées."
+param.geo_high_floor.label = "LOD High : triangles gardés au minimum"
+param.geo_high_floor.help = "Le LOD High (vu de près) n'est jamais réduit sous cette part de ses triangles."
+param.geo_high_error.label = "LOD High : tolérance de déformation"
+param.geo_high_error.help = "Écart maximal toléré sur le LOD High, en % de la taille de la pièce. Les LODs lointains tolèrent 2 à 5 %."
+
+# ---------------------------------------------------------------- presets
+preset.light.label = "Léger"
+preset.light.description = "Textures : conversion, puissance de 2, mipmaps. Aucune réduction de taille ni de géométrie."
+preset.balanced.label = "Équilibré"
+preset.balanced.description = "Comme Léger, puis réduction des grosses textures seulement (livrées, ≥ 1024 px, copies du +hi.ytd) jusqu'à 16 Mio : 1 division, perte faible. Géométrie au-dessus de 16 Mio : LODs lointains, High gardé à 80 % au moins."
+preset.strong.label = "Fort"
+preset.strong.description = "Réduction plus poussée (petites textures comprises, 2 divisions, perte moyenne) ; si ça ne suffit pas, réduction forcée jusqu'à 16 Mio, jamais sous 256 px ni sous 1024 px pour une livrée. Géométrie : High gardé à 60 % au moins."
+
+# ---------------------------------------------------------------- skipped files
+skip.encrypted = "chiffré (FXAP) : illisible, laissé tel quel"
+skip.unknown_format = "format inconnu (pas un RSC7)"
+skip.below_min_physical = "mémoire physique (et virtuelle) ≤ {mib} Mio, seuil « Mémoire physique minimale »"
+skip.summary = "ignoré ({reason})"
+skip.preview = "fichier ignoré ({reason}) : rien à comparer."
+resources.detected = "{count} ressources détectées dans le dossier : chacune est traitée séparément"
+
+# ---------------------------------------------------------------- texture labels
+class.hi_copy = "copie +hi"
+class.last = "feux / vitres"
+class.livery = "livrée"
+class.big = "grande"
+class.small = "petite"
+tex.protected = "protégée"
+
+# ---------------------------------------------------------------- analysis
+issue.not_pot = "pas une puissance de 2"
+issue.format = "format {format}"
+issue.uncompressed = "non compressée ({format})"
+issue.no_mips = "sans mipmaps"
+issue.incomplete_mips = "mipmaps incomplets ({levels}/{full})"
+issue.texture = "texture {name} ({label}) : {problems}"
+issue.unsupported_format = "texture {name} ({role}) : format {format} non géré, laissée telle quelle"
+issue.over_budget = "au-dessus du budget de {budget} : réduction ciblée, grosses textures d'abord (livrées, ≥ 1024 px, copies +hi)"
+issue.liveries = "{liveries} livrée(s) (jamais sous 1024 px), {hi} texture(s) avec une copie dans le +hi.ytd"
+issue.protected = "{count} texture(s) protégée(s) (émissive, palette, lookup…) : non modifiées"
+issue.virtual_over_budget = "mémoire virtuelle {virt} au-dessus du budget de {budget} (triangles High / Med / Low / VLow : {lods})"
+issue.geo_reduced = "{text} : géométrie réduite, LODs lointains d'abord"
+issue.geo_disabled = "{text} : réduction de géométrie désactivée"
+summary.textures = "{count} texture(s), max {max} px"
+summary.no_textures = "aucune texture"
+summary.triangles = "{count} triangles (High)"
+
+# ---------------------------------------------------------------- targeted reduction
+hold.livery = "livrées à 1024 px (plancher)"
+hold.lights = "feux / gyrophares / vitres (nom)"
+hold.small = "petites textures conservées (préréglage)"
+change.texture = "texture {name} ({label}) : {changes}"
+change.reduction = "réduction ciblée ÷{factor} (perte {loss} %)"
+change.forced = "forcée"
+change.repacked = "pages graphiques recompactées"
+
+# ---------------------------------------------------------------- optimisation
+warn.textures_heavier = "textures non modifiées : le résultat ({after}) serait plus lourd que l'original ({before})"
+warn.geometry_unchanged = "géométrie non modifiée : {error}"
+error.verify = "vérification après écriture échouée"
+error.verify_geometries = "vérification après écriture échouée (géométries)"
+
+# ---------------------------------------------------------------- preview
+preview.title = "Texture {name} ({label})"
+preview.texture_desc = "{width}×{height} {format} · {levels} mips · {size} Mio"
+preview.protected = "protégée : non modifiée"
+preview.unchanged = "non modifiée"

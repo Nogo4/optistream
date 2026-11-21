@@ -11,7 +11,7 @@ fn candidate_sizes_follow_halvings() {
     let c = Candidate { block: 0, format: tf::DXT1, width: 2048, height: 2048, levels: 12, loss: vec![0.0], key: vec![0] };
     let full = c.size(0, true);
     let half = c.size(1, true);
-    // DXT1 2048² full chain ≈ 2.67 Mio; one halving keeps about a quarter.
+    // DXT1 2048² full chain ≈ 2.67 MiB; one halving keeps about a quarter.
     assert!(full > 2_700_000 && full < 2_900_000, "{full}");
     assert!(half * 4 >= full - 64 && half * 4 <= full + 64, "{half}");
 }
@@ -252,8 +252,8 @@ fn never_access_keeps_the_texture_and_explains_why() {
     assert!(steps[1] > 0);
     assert_eq!(fp.warnings.len(), 1);
     let w = &fp.warnings[0];
-    assert!(w.starts_with("reste à ") && w.contains("(budget 0.0 Mio)"), "{w}");
-    assert!(w.contains("logos : "), "{w}");
+    assert!(w.starts_with("still at ") && w.contains("(budget 0.0 MiB)"), "{w}");
+    assert!(w.contains("logos: "), "{w}");
 }
 
 #[test]
@@ -262,7 +262,7 @@ fn force_only_textures_wait_for_forcing() {
     let rules = [Rule { access: Access::ForceOnly(HOLD_LOGO), ..rule() }];
     let fp = plan(&s, &rules, &limits(0));
     assert_eq!(steps_by_texture(&fp, 1), [0]);
-    assert!(fp.warnings[0].contains("logos : "), "{:?}", fp.warnings);
+    assert!(fp.warnings[0].contains("logos: "), "{:?}", fp.warnings);
 
     let forced = plan(&s, &rules, &Limits { force: true, ..limits(0) });
     let b = &forced.blocks[0];
@@ -278,7 +278,7 @@ fn min_size_and_max_steps_bound_the_reduction() {
     let fp = plan(&s, &rules, &limits(0));
     assert_eq!(steps_by_texture(&fp, 2), [1, 2]);
     let w = &fp.warnings[0];
-    assert!(w.contains("à la taille minimale") && w.contains("divisions max atteintes"), "{w}");
+    assert!(w.contains("at the minimum size") && w.contains("max halvings reached"), "{w}");
 }
 
 #[test]
@@ -295,11 +295,11 @@ fn forcing_goes_past_the_limits_down_to_the_forced_floor() {
 #[test]
 fn hard_floor_holds_even_when_forcing() {
     let s = distinct(1, 256);
-    let hold = Hold { label: "plancher", rank: 2 };
+    let hold = Hold { label: "floor", rank: 2 };
     let rules = [Rule { hard_floor: 128, hard_floor_hold: Some(hold), ..rule() }];
     let fp = plan(&s, &rules, &Limits { force: true, ..limits(0) });
     assert_eq!(fp.blocks[0].steps, 1);
-    assert!(fp.warnings[0].contains("plancher : "), "{:?}", fp.warnings);
+    assert!(fp.warnings[0].contains("floor: "), "{:?}", fp.warnings);
 }
 
 #[test]
@@ -308,7 +308,7 @@ fn max_loss_stops_lossy_steps() {
     let rules = [Rule { ignore_loss: false, ..rule() }];
     let fp = plan(&s, &rules, &Limits { max_loss: 0.0, ..limits(0) });
     assert_eq!(fp.blocks[0].steps, 0);
-    assert!(fp.warnings[0].contains("perte maximale atteinte"), "{:?}", fp.warnings);
+    assert!(fp.warnings[0].contains("maximum loss reached"), "{:?}", fp.warnings);
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn textures_without_a_role_are_protected() {
     let fp = plan_file(&s.res, &[], &texs, &limits(0)).unwrap();
     assert_eq!(fp.blocks[0].steps, 0);
     assert!(fp.blocks[0].enc.is_none());
-    assert!(fp.warnings[0].contains(HOLD_PROTECTED.label), "{:?}", fp.warnings);
+    assert!(fp.warnings[0].contains(optistream_i18n::t(HOLD_PROTECTED.label)), "{:?}", fp.warnings);
 }
 
 #[test]
@@ -347,7 +347,7 @@ fn unknown_graphics_pointer_leaves_the_file_untouched() {
     let fp = plan(&s, &[rule(); 2], &limits(0));
     assert!(fp.blocks.is_empty());
     assert_eq!(fp.physical_after, before);
-    assert!(fp.warnings[0].contains("référence(s) graphique(s) inconnue(s)"), "{:?}", fp.warnings);
+    assert!(fp.warnings[0].contains("unknown graphics reference(s)"), "{:?}", fp.warnings);
 }
 
 #[test]

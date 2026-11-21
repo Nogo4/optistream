@@ -1,0 +1,17 @@
+# cli messages (en). Keys are looked up as "cli.<key>".
+
+# Usage and argument errors
+usage = "usage: optistream-cli [--lang en|fr] (analyze|optimize|crops|inspect|verify) ..."
+error.unknown_lang = "unknown language {lang} (en|fr)"
+error.unknown_method = "unknown method {method} (clothing|mapping|vehicle)"
+error.unknown_preset = "unknown preset"
+error.set_syntax = "--set expects key=value"
+error.unknown_setting = "unknown setting {key}"
+error.missing_dir = "missing resource dir"
+error.output_choice = "choose exactly one of --out <dir> or --in-place"
+error.unknown_kind = "unknown file type"
+
+# Command output
+analyze.summary = "{files} files analysed, {other} other files"
+verify.summary = "{count} file(s) verified, {bad} failed"
+crops.nothing_to_gain = "nothing to gain"

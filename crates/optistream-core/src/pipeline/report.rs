@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use optistream_i18n::{self as i18n, tf};
 use serde::Serialize;
 
 use crate::method::Issue;
@@ -109,73 +110,90 @@ impl Report {
     pub fn to_text(&self) -> String {
         let t = self.totals();
         let mut s = String::new();
-        s += &format!("OptiStream — {}\n", self.method);
-        s += &format!("Source      : {}\n", self.source.display());
-        s += &format!(
-            "Destination : {}{}\n",
-            self.destination.display(),
-            if self.in_place { " (modification sur place)" } else { "" }
+        s += &tf!("core.report.header", method = self.method);
+        s += "\n";
+        s += &tf!("core.report.source", path = self.source.display());
+        s += "\n";
+        let in_place = if self.in_place { i18n::t("core.report.in_place") } else { "" };
+        s += &tf!("core.report.destination", path = self.destination.display(), in_place = in_place);
+        s += "\n";
+        let cancelled = if self.cancelled { i18n::t("core.report.cancelled") } else { "" };
+        s += &tf!("core.report.duration", seconds = format!("{:.0}", self.seconds), cancelled = cancelled);
+        s += "\n\n";
+        s += &tf!(
+            "core.report.files",
+            processed = t.processed,
+            optimized = t.optimized,
+            errors = t.errors,
+            copied = self.copied_files
         );
-        s += &format!("Durée       : {:.0} s{}\n\n", self.seconds, if self.cancelled { " (annulé)" } else { "" });
-        s += &format!(
-            "Fichiers traités : {}, optimisés : {}, erreurs : {}, autres fichiers copiés : {}\n",
-            t.processed, t.optimized, t.errors, self.copied_files
-        );
-        s += &format!("Disque           : {} → {}\n", mib(t.disk_before), mib(t.disk_after));
-        s += &format!("Mémoire physique : {} → {}\n", mib(t.graphics_before), mib(t.graphics_after));
-        s += &format!("Mémoire virtuelle: {} → {}\n", mib(t.system_before), mib(t.system_after));
-        s += &format!("Fichiers > 16 Mio (avertissement FiveM) : {} → {}\n", t.warnings_before, t.warnings_after);
+        s += "\n";
+        s += &tf!("core.report.disk", before = mib(t.disk_before), after = mib(t.disk_after));
+        s += "\n";
+        s += &tf!("core.report.physical", before = mib(t.graphics_before), after = mib(t.graphics_after));
+        s += "\n";
+        s += &tf!("core.report.virtual", before = mib(t.system_before), after = mib(t.system_after));
+        s += "\n";
+        s += &tf!("core.report.warnings", before = t.warnings_before, after = t.warnings_after);
+        s += "\n";
         if !self.not_written.is_empty() {
-            s += &format!(
-                "\nATTENTION : {} fichier(s) non écrit(s), la destination est incomplète :\n",
-                self.not_written.len()
-            );
+            s += "\n";
+            s += &tf!("core.report.not_written", count = self.not_written.len());
+            s += "\n";
             for p in &self.not_written {
                 s += &format!("  {}\n", p.display());
             }
         }
         let resources = self.by_resource();
         if resources.len() > 1 || resources.first().is_some_and(|(p, _)| !p.as_os_str().is_empty()) {
-            s += "\nPar ressource (> 16 Mio avant → après, mémoire physique) :\n";
+            s += &format!("\n{}\n", i18n::t("core.report.by_resource"));
             for (dir, r) in &resources {
-                let name = if dir.as_os_str().is_empty() { "(racine)".to_owned() } else { dir.display().to_string() };
-                s += &format!(
-                    "  {name} : {} → {}, {} → {}, {} optimisé(s){}\n",
-                    r.warnings_before,
-                    r.warnings_after,
-                    mib(r.graphics_before),
-                    mib(r.graphics_after),
-                    r.optimized,
-                    if r.errors > 0 { format!(", {} erreur(s)", r.errors) } else { String::new() }
+                let name = if dir.as_os_str().is_empty() { i18n::t("core.report.root").to_owned() } else { dir.display().to_string() };
+                let errors = if r.errors > 0 { tf!("core.report.resource_errors", count = r.errors) } else { String::new() };
+                let line = tf!(
+                    "core.report.resource_line",
+                    name = name,
+                    warnings_before = r.warnings_before,
+                    warnings_after = r.warnings_after,
+                    before = mib(r.graphics_before),
+                    after = mib(r.graphics_after),
+                    optimized = r.optimized,
+                    errors = errors
                 );
+                s += &format!("  {line}\n");
             }
         }
         if !self.resource_issues.is_empty() {
-            s += "\nContrôles de la ressource :\n";
+            s += &format!("\n{}\n", i18n::t("core.report.resource_checks"));
             for i in &self.resource_issues {
                 s += &format!("  [{:?}] {}\n", i.severity, i.text);
             }
         }
-        s += "\nDétail :\n";
+        s += &format!("\n{}\n", i18n::t("core.report.detail"));
         for f in &self.files {
             match &f.status {
                 FileStatus::Unchanged if f.warnings.is_empty() => continue,
-                FileStatus::Error(e) => s += &format!("- {} : ERREUR {}\n", f.rel.display(), e),
+                FileStatus::Error(e) => {
+                    s += &tf!("core.report.file_error", path = f.rel.display(), error = e);
+                    s += "\n";
+                }
                 _ => {
                     // The virtual memory is only shown when it changed (geometry reduction).
                     let virt = if f.before.system != f.after.system {
-                        format!(", virtuelle {} → {}", mib(f.before.system), mib(f.after.system))
+                        tf!("core.report.file_virtual", before = mib(f.before.system), after = mib(f.after.system))
                     } else {
                         String::new()
                     };
-                    s += &format!(
-                        "- {} : physique {} → {}{virt}, disque {} → {}\n",
-                        f.rel.display(),
-                        mib(f.before.graphics),
-                        mib(f.after.graphics),
-                        mib(f.before.disk),
-                        mib(f.after.disk)
+                    s += &tf!(
+                        "core.report.file_line",
+                        path = f.rel.display(),
+                        before = mib(f.before.graphics),
+                        after = mib(f.after.graphics),
+                        virt = virt,
+                        disk_before = mib(f.before.disk),
+                        disk_after = mib(f.after.disk)
                     );
+                    s += "\n";
                     for c in &f.changes {
                         s += &format!("    · {c}\n");
                     }
@@ -256,29 +274,29 @@ mod tests {
     #[test]
     fn text_summary() {
         let mut opt = file("stream/a.ydd", "", FileStatus::Optimized, size(2, 100), size(1, 60));
-        opt.changes.push("textures réduites".into());
-        opt.warnings.push("attention".into());
+        opt.changes.push("textures reduced".into());
+        opt.warnings.push("careful".into());
         let mut r = report(vec![
             opt,
             file("stream/quiet.ydd", "", FileStatus::Unchanged, size(1, 1), size(1, 1)),
-            file("stream/bad.ydd", "", FileStatus::Error("corrompu".into()), size(1, 1), size(1, 1)),
+            file("stream/bad.ydd", "", FileStatus::Error("corrupted".into()), size(1, 1), size(1, 1)),
         ]);
-        r.resource_issues.push(Issue::warning("trop de drawables"));
+        r.resource_issues.push(Issue::warning("too many drawables"));
         let text = r.to_text();
         assert!(text.starts_with("OptiStream — Test\n"), "{text}");
-        assert!(text.contains("Fichiers traités : 3, optimisés : 1, erreurs : 1, autres fichiers copiés : 2"));
-        assert!(text.contains("Fichiers > 16 Mio (avertissement FiveM) : 1 → 0"));
-        assert!(text.contains("- stream/a.ydd : physique 32.0 Mio → 16.0 Mio, disque"));
-        assert!(text.contains("    · textures réduites\n    ! attention\n"));
-        assert!(text.contains("- stream/bad.ydd : ERREUR corrompu"));
-        assert!(text.contains("[Warning] trop de drawables"));
+        assert!(text.contains("Files processed: 3, optimised: 1, errors: 1, other files copied: 2"));
+        assert!(text.contains("Files > 16 MiB (FiveM warning): 1 → 0"));
+        assert!(text.contains("- stream/a.ydd: physical 32.0 MiB → 16.0 MiB, disk"));
+        assert!(text.contains("    · textures reduced\n    ! careful\n"));
+        assert!(text.contains("- stream/bad.ydd: ERROR corrupted"));
+        assert!(text.contains("[Warning] too many drawables"));
         // Unchanged files without warnings are left out of the detail.
         assert!(!text.contains("quiet.ydd"));
         // Same virtual memory before and after: no virtual column.
-        assert!(!text.contains("virtuelle 0.0"));
+        assert!(!text.contains("virtual 0.0"));
         // A single resource at the root: no per-resource section.
-        assert!(!text.contains("Par ressource"));
-        assert!(!text.contains("ATTENTION"));
+        assert!(!text.contains("Per resource"));
+        assert!(!text.contains("WARNING"));
     }
 
     #[test]
@@ -287,10 +305,10 @@ mod tests {
         r.cancelled = true;
         r.not_written.push("res/b.ydd".into());
         let text = r.to_text();
-        assert!(text.contains("(annulé)"));
-        assert!(text.contains("ATTENTION : 1 fichier(s) non écrit(s)"));
+        assert!(text.contains("(cancelled)"));
+        assert!(text.contains("WARNING: 1 file(s) not written"));
         assert!(text.contains("  res/b.ydd\n"));
-        assert!(text.contains("Par ressource"));
-        assert!(text.contains("  res : 1 → 0, 32.0 Mio → 16.0 Mio, 1 optimisé(s)\n"));
+        assert!(text.contains("Per resource"));
+        assert!(text.contains("  res: 1 → 0, 32.0 MiB → 16.0 MiB, 1 optimised\n"));
     }
 }

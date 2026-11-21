@@ -1,0 +1,23 @@
+# texture messages (fr). Keys are looked up as "texture.<key>".
+
+# Texture roles
+role.diffuse = "diffuse"
+role.normal = "normal"
+role.specular = "spec"
+role.other = "autre"
+
+# Reasons a texture keeps its size (budget warning)
+hold.protected = "protégées ou rôle inconnu"
+
+# Memory budget warnings
+budget.mips_not_completed = "mipmaps manquants non complétés : la mémoire serait passée de {before} à {after}"
+budget.over_budget = "reste à {size} (budget {budget}) : limites atteintes, textures restantes — {reasons}"
+budget.reason = "{label} : {size}"
+budget.blocked_loss = "perte maximale atteinte"
+budget.blocked_min_size = "à la taille minimale"
+budget.blocked_max_steps = "divisions max atteintes"
+budget.texture_error = "texture {name} : {error}"
+
+# Texture data location
+resource.outside_graphics = "texture {name} : données hors du segment graphique, ignorée"
+resource.unknown_refs = "textures non modifiées : {count} référence(s) graphique(s) inconnue(s) ({list})"

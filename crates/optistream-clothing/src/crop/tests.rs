@@ -118,7 +118,7 @@ fn window_area_rect_and_mapping_are_consistent() {
     // The window corners map to the corners of the cropped texture.
     assert_eq!(w.map([0.5, 0.0]), [0.0, 0.0]);
     assert_eq!(w.map([0.75, 0.5]), [1.0, 1.0]);
-    assert_eq!(w.describe(), "25 % × 50 % de la feuille");
+    assert_eq!(w.describe(), "25% × 50% of the sheet");
 }
 
 #[test]

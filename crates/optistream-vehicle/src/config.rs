@@ -1,6 +1,7 @@
 //! Parameters, presets and their typed view.
 
 use optistream_core::{ParamKind, ParamSpec, Preset, Settings, Value};
+use optistream_i18n::t;
 use optistream_texture::budget::Limits;
 use optistream_texture::TexturePolicy;
 
@@ -30,61 +31,64 @@ pub const FORCE_MAX_STEPS: u32 = 3;
 
 pub fn params() -> Vec<ParamSpec> {
     let flag = |key, label, group, help| ParamSpec { key, label, group, help, kind: ParamKind::Bool };
+    let (general, textures, budget, geometry) =
+        (t("vehicle.group.general"), t("vehicle.group.textures"), t("vehicle.group.budget"), t("vehicle.group.geometry"));
+    let mib = t("vehicle.unit.mib");
     vec![
         ParamSpec {
             key: OPT_MIN_PHYSICAL,
-            label: "Mémoire physique minimale",
-            group: "Général",
-            help: "Seuls les fichiers dont la mémoire physique déclarée dépasse cette valeur sont optimisés ; 16 Mio est le seuil d'avertissement de FiveM. 0 : tous les fichiers.",
-            kind: ParamKind::Int { min: 0, max: 128, step: 4, unit: "Mio" },
+            label: t("vehicle.param.min_physical.label"),
+            group: general,
+            help: t("vehicle.param.min_physical.help"),
+            kind: ParamKind::Int { min: 0, max: 128, step: 4, unit: mib },
         },
-        flag(TEX_CONVERT, "Convertir BC7 / DXT3 / non compressé", "Textures", "Normal maps → DXT5 ; autres → DXT1, ou DXT5 si l'alpha est réellement utilisé. Les DXT1 / DXT5 gardent leur format."),
-        flag(TEX_FORCE_POT, "Forcer les puissances de 2", "Textures", "Arrondi vers le bas : 3000×3000 → 2048×2048, etc."),
-        flag(TEX_FIX_MIPS, "Compléter les mipmaps", "Textures", "Chaîne complète jusqu'à 4 px, comme le jeu de base."),
-        flag(BUDGET_ENABLED, "Réduire jusqu'au budget", "Réduction ciblée", "Si le fichier dépasse encore le budget après les corrections, les grosses textures (livrées, feuilles de carrosserie ≥ 1024 px, textures qui ont une copie dans le +hi.ytd) sont divisées par 2, celles qui perdent le moins d'abord, jusqu'à passer sous le budget."),
+        flag(TEX_CONVERT, t("vehicle.param.convert.label"), textures, t("vehicle.param.convert.help")),
+        flag(TEX_FORCE_POT, t("vehicle.param.force_pot.label"), textures, t("vehicle.param.force_pot.help")),
+        flag(TEX_FIX_MIPS, t("vehicle.param.fix_mips.label"), textures, t("vehicle.param.fix_mips.help")),
+        flag(BUDGET_ENABLED, t("vehicle.param.budget_enabled.label"), budget, t("vehicle.param.budget_enabled.help")),
         ParamSpec {
             key: BUDGET_MIB,
-            label: "Budget",
-            group: "Réduction ciblée",
-            help: "Mémoire physique visée par fichier. 16 Mio : plus d'avertissement FiveM.",
-            kind: ParamKind::Int { min: 4, max: 64, step: 2, unit: "Mio" },
+            label: t("vehicle.param.budget.label"),
+            group: budget,
+            help: t("vehicle.param.budget.help"),
+            kind: ParamKind::Int { min: 4, max: 64, step: 2, unit: mib },
         },
-        flag(BUDGET_SMALL, "Réduire aussi les petites textures", "Réduction ciblée", "Après les grosses textures, les textures de moins de 1024 px (pièces, intérieur) peuvent aussi être réduites, dans les limites ci-dessous."),
+        flag(BUDGET_SMALL, t("vehicle.param.small.label"), budget, t("vehicle.param.small.help")),
         ParamSpec {
             key: BUDGET_MAX_STEPS,
-            label: "Divisions max par texture",
-            group: "Réduction ciblée",
-            help: "1 division = largeur et hauteur ÷ 2 (mémoire ÷ 4).",
+            label: t("vehicle.param.max_steps.label"),
+            group: budget,
+            help: t("vehicle.param.max_steps.help"),
             kind: ParamKind::Int { min: 1, max: 3, step: 1, unit: "" },
         },
         ParamSpec {
             key: BUDGET_MIN_SIZE,
-            label: "Taille minimale",
-            group: "Réduction ciblée",
-            help: "Une texture n'est jamais réduite sous cette taille (petit côté). Les livrées ne descendent jamais sous 1024 px.",
+            label: t("vehicle.param.min_size.label"),
+            group: budget,
+            help: t("vehicle.param.min_size.help"),
             kind: ParamKind::Choice(vec![(256, "256 px"), (512, "512 px"), (1024, "1024 px")]),
         },
         ParamSpec {
             key: BUDGET_MAX_LOSS,
-            label: "Perte maximale",
-            group: "Réduction ciblée",
-            help: "Écart moyen toléré entre la texture réduite et l'originale, en % de la plage noir → blanc. Repère : une livrée 2048 → 1024 ≈ 2,4 %. Une texture qui perdrait plus n'est pas réduite.",
+            label: t("vehicle.param.max_loss.label"),
+            group: budget,
+            help: t("vehicle.param.max_loss.help"),
             kind: ParamKind::Float { min: 0.1, max: 10.0, step: 0.1, unit: "%" },
         },
-        flag(BUDGET_FORCE, "Forcer sous le budget", "Réduction ciblée", "Si les limites ci-dessus ne suffisent pas, la réduction continue au-delà (perte sans limite, 3 divisions, jamais sous 256 px ni sous 1024 px pour une livrée) ; les feux, gyrophares et vitres (nom) passent en dernier. Les émissives et palettes ne sont jamais réduites."),
-        flag(GEO_ENABLED, "Réduire la géométrie au-dessus du budget", "Géométrie", "Si la mémoire virtuelle d'un modèle (.yft, .ydr) dépasse le budget, ses polygones sont réduits jusqu'à passer dessous : LODs lointains d'abord (VLow, Low, Med), le LOD High seulement si ça ne suffit pas. Bords, coutures, pièces mobiles et skinning sont préservés ; la collision et la physique ne sont jamais touchées."),
+        flag(BUDGET_FORCE, t("vehicle.param.force.label"), budget, t("vehicle.param.force.help")),
+        flag(GEO_ENABLED, t("vehicle.param.geo_enabled.label"), geometry, t("vehicle.param.geo_enabled.help")),
         ParamSpec {
             key: GEO_HIGH_FLOOR,
-            label: "LOD High : triangles gardés au minimum",
-            group: "Géométrie",
-            help: "Le LOD High (vu de près) n'est jamais réduit sous cette part de ses triangles.",
+            label: t("vehicle.param.geo_high_floor.label"),
+            group: geometry,
+            help: t("vehicle.param.geo_high_floor.help"),
             kind: ParamKind::Int { min: 50, max: 100, step: 5, unit: "%" },
         },
         ParamSpec {
             key: GEO_HIGH_ERROR,
-            label: "LOD High : tolérance de déformation",
-            group: "Géométrie",
-            help: "Écart maximal toléré sur le LOD High, en % de la taille de la pièce. Les LODs lointains tolèrent 2 à 5 %.",
+            label: t("vehicle.param.geo_high_error.label"),
+            group: geometry,
+            help: t("vehicle.param.geo_high_error.help"),
             kind: ParamKind::Float { min: 0.1, max: 3.0, step: 0.1, unit: "%" },
         },
     ]
@@ -112,9 +116,9 @@ fn preset(id: &'static str, label: &'static str, description: &'static str, budg
 
 pub fn presets() -> Vec<Preset> {
     vec![
-        preset("leger", "Léger", "Textures : conversion, puissance de 2, mipmaps. Aucune réduction de taille ni de géométrie.", false, false, 1, 3.0, false, None),
-        preset("equilibre", "Équilibré", "Comme Léger, puis réduction des grosses textures seulement (livrées, ≥ 1024 px, copies du +hi.ytd) jusqu'à 16 Mio : 1 division, perte faible. Géométrie au-dessus de 16 Mio : LODs lointains, High gardé à 80 % au moins.", true, false, 1, 3.0, false, Some((80, 0.5))),
-        preset("fort", "Fort", "Réduction plus poussée (petites textures comprises, 2 divisions, perte moyenne) ; si ça ne suffit pas, réduction forcée jusqu'à 16 Mio, jamais sous 256 px ni sous 1024 px pour une livrée. Géométrie : High gardé à 60 % au moins.", true, true, 2, 5.0, true, Some((60, 1.0))),
+        preset("leger", t("vehicle.preset.light.label"), t("vehicle.preset.light.description"), false, false, 1, 3.0, false, None),
+        preset("equilibre", t("vehicle.preset.balanced.label"), t("vehicle.preset.balanced.description"), true, false, 1, 3.0, false, Some((80, 0.5))),
+        preset("fort", t("vehicle.preset.strong.label"), t("vehicle.preset.strong.description"), true, true, 2, 5.0, true, Some((60, 1.0))),
     ]
 }
 
@@ -251,7 +255,7 @@ mod tests {
         let ids: Vec<&str> = presets().iter().map(|p| p.id).collect();
         assert_eq!(ids, ["leger", "equilibre", "fort"]);
         let (l, e, f) = (preset_cfg("leger"), preset_cfg("equilibre"), preset_cfg("fort"));
-        // Léger only corrects: no size or geometry reduction.
+        // Light only corrects: no size or geometry reduction.
         assert!(!l.budget_enabled && !l.geo_enabled && !l.force && !l.small);
         for (weak, strong) in [(&l, &e), (&e, &f)] {
             assert!(strong.budget_enabled >= weak.budget_enabled);

@@ -10,6 +10,7 @@ use std::sync::OnceLock;
 
 use optistream_rage::drawable::ShaderInfo;
 use optistream_rage::joaat::joaat;
+use optistream_i18n::t;
 use optistream_texture::TextureRole;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,7 +24,7 @@ impl Usage {
     pub fn label(self) -> &'static str {
         match self {
             Usage::Role(r) => r.label(),
-            Usage::Protected => "protégée",
+            Usage::Protected => t("mapping.usage.protected"),
         }
     }
 }

@@ -1,0 +1,77 @@
+# mapping messages (en). Keys are looked up as "mapping.<key>".
+
+# ---------------------------------------------------------------- method
+method.label = "Mappings / MLO"
+method.description = "Maps and MLOs: textures (.ytd and embedded in .ydr / .ydd). Accepts one resource or a whole category folder ([oren-mappings])."
+resources_detected = "{count} resources found in the folder: each one is processed separately"
+
+# ---------------------------------------------------------------- skipped files
+skip.encrypted = "encrypted (FXAP): unreadable, left as is"
+skip.unknown_format = "unknown format (not RSC7)"
+skip.below_min_physical = "physical memory ≤ {size} MiB, \"Minimum physical memory\" threshold"
+skip.summary = "skipped ({reason})"
+skip.preview = "file skipped ({reason}): nothing to compare."
+
+# ---------------------------------------------------------------- parameters
+unit.mib = "MiB"
+group.general = "General"
+group.textures = "Textures"
+group.budget = "Targeted reduction"
+param.min_physical.label = "Minimum physical memory"
+param.min_physical.help = "Only files whose declared physical memory exceeds this value are optimised; 16 MiB is the FiveM warning threshold. 0: every file."
+param.convert.label = "Convert BC7 / DXT3 / uncompressed"
+param.convert.help = "Normal maps → DXT5; others → DXT1, or DXT5 if the alpha is actually used. DXT1 / DXT5 keep their format."
+param.force_pot.label = "Force powers of 2"
+param.force_pot.help = "Rounded down: 3000×3000 → 2048×2048, etc."
+param.fix_mips.label = "Complete the mipmaps"
+param.fix_mips.help = "Full chain down to 4 px, like the base game."
+param.budget_enabled.label = "Reduce down to the budget"
+param.budget_enabled.help = "If the file is still over the budget after the corrections, the textures that lose the least from being divided by 2 are halved, one at a time, until the file is under the budget or the limits below are reached."
+param.budget.label = "Budget"
+param.budget.help = "Targeted physical memory per file. 16 MiB: no more FiveM warning."
+param.max_steps.label = "Max divisions per texture"
+param.max_steps.help = "1 division = width and height ÷ 2 (memory ÷ 4)."
+param.min_size.label = "Minimum size"
+param.min_size.help = "A texture is never reduced below this size (short side)."
+param.max_loss.label = "Maximum loss"
+param.max_loss.help = "Average difference tolerated between the reduced texture and the original, in % of the black → white range (0 %: identical). Reference points: plaster wall ÷2 ≈ 0.9 %, wood floor ÷2 ≈ 1.5 %, wooden slats ÷2 ≈ 3 %, printed text ≈ 14 %. A texture that would lose more is not reduced."
+param.force.label = "Force under budget"
+param.force.help = "If the limits above are not enough, the reduction goes on past them (loss, divisions, minimum size down to 64 px), always starting with the textures that lose the least; text / logos and unknown roles come last. Palettes, emissives and script_rt are never reduced."
+
+# ---------------------------------------------------------------- presets
+preset.leger.label = "Light"
+preset.leger.description = "Textures: conversion, power of 2, mipmaps. No size reduction."
+preset.equilibre.label = "Balanced"
+preset.equilibre.description = "Like Light, then targeted reduction down to 16 MiB: 2 max divisions, never below 512 px, low loss."
+preset.fort.label = "Strong"
+preset.fort.description = "Stronger targeted reduction (3 max divisions, 256 px, medium loss); if that is not enough, forced reduction until the file is under 16 MiB."
+
+# ---------------------------------------------------------------- analysis
+usage.protected = "protected"
+issue.not_pot = "not a power of 2"
+issue.format = "{format} format"
+issue.uncompressed = "uncompressed ({format})"
+issue.no_mips = "no mipmaps"
+issue.incomplete_mips = "incomplete mipmaps ({levels}/{full})"
+issue.texture = "texture {name} ({role}): {problems}"
+issue.unsupported_format = "texture {name} ({role}): unsupported format {format}, left as is"
+issue.over_budget = "over the {budget} budget: targeted reduction of the textures that lose the least"
+issue.protected = "{count} protected texture(s) (emissive, palette, lookup…): left unchanged"
+summary.textures = "{count} texture(s), max {max} px"
+summary.no_textures = "no textures"
+
+# ---------------------------------------------------------------- optimisation
+hold.readable = "text / logos / signs (name)"
+change.texture = "texture {name} ({role}): {changes}"
+change.recompacted = "graphics pages recompacted"
+reduction.text = "targeted reduction ÷{factor} (loss {loss} %)"
+reduction.forced = ", forced"
+warning.heavier = "unchanged: the result ({after}) would be heavier than the original ({before})"
+error.verify = "check after writing failed"
+
+# ---------------------------------------------------------------- previews
+preview.title = "Texture {name} ({role})"
+preview.desc = "{width}×{height} {format} · {levels} mips · {size} MiB"
+preview.protected = "protected: unchanged"
+preview.readable = "text / logo: size kept"
+preview.unchanged = "unchanged"

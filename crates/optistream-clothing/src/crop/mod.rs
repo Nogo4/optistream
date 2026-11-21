@@ -59,7 +59,7 @@ impl Window {
     }
 
     pub fn describe(&self) -> String {
-        format!("{:.0} % × {:.0} % de la feuille", self.u.size * 100.0, self.v.size * 100.0)
+        optistream_i18n::tf!("clothing.crop.window", u = format!("{:.0}", self.u.size * 100.0), v = format!("{:.0}", self.v.size * 100.0))
     }
 }
 

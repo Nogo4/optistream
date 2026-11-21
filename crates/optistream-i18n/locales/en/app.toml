@@ -1,0 +1,141 @@
+# app messages (en). Keys are looked up as "app.<key>".
+
+# Shared labels
+common.cancel = "Cancel"
+common.error = "Error"
+common.ok = "OK"
+common.compare = "Compare"
+common.compare_before_after = "Compare before / after"
+common.optimise = "Optimise"
+common.optimise_file = "Optimise this file"
+common.optimise_selection = "Optimise the selection ({count})"
+common.physical_memory = "Physical memory"
+
+# Top bar
+top.tagline = "FiveM stream optimisation"
+top.lang_hint = "Interface language. Results already computed stay in the language they were produced in: run a new analysis to translate them."
+
+# Status bar
+status.ready = "Ready"
+status.running = "{task} in progress"
+status.analysis_done = "Analysis complete: {count} file(s)"
+status.optimisation_done = "Optimisation complete: {optimised} / {processed} file(s) optimised, physical memory {before} → {after}"
+status.comparison_ready = "Comparison ready"
+
+# Background jobs
+job.analysis = "Analysis"
+job.optimisation = "Optimisation"
+job.comparison = "Comparison"
+job.verifying = "Checking the written files…"
+job.crashed = "internal crash during the task"
+
+# Dialogs
+dialog.close.title = "A task is running"
+dialog.close.line1 = "Quitting now leaves the remaining files unprocessed:"
+dialog.close.line2 = "an export would be incomplete (files would be missing)."
+dialog.close.quit = "Quit anyway"
+dialog.close.continue = "Continue the task"
+dialog.in_place.title = "Modify the folder directly?"
+dialog.in_place.all = "Every affected file will be replaced, without a backup."
+dialog.in_place.one = "This file will be replaced, without a backup:"
+dialog.in_place.many = "These {count} files will be replaced, without a backup."
+dialog.in_place.confirm = "Confirm"
+
+# Side panel: resource
+side.resource.title = "Resource"
+side.resource.type = "Type"
+side.resource.folder = "Resource folder (or a category folder [...])"
+side.resource.pick = "Choose the resource folder"
+path.none = "No folder selected"
+
+# Side panel: settings
+side.settings.title = "Settings"
+side.settings.custom = "Custom settings"
+side.settings.default = "Default"
+
+# Side panel: output
+side.output.title = "Output"
+side.output.export = "Export"
+side.output.export_hint = "New optimised resource, the original stays untouched"
+side.output.export_pick = "Choose the export folder"
+side.output.overwrite = "Overwrite if the folder already exists"
+side.output.in_place = "Modify in place"
+side.output.in_place_hint = "Replaces the files of the source folder"
+side.output.in_place_warning = "No backup: the original files are replaced."
+side.output.no_export_dir = "Choose an export folder."
+
+# Side panel: actions
+side.analyse = "Analyse"
+side.compare_hint = "Compare before / after the file selected in the analysis"
+side.optimise_all = "Optimise the whole resource"
+
+# Files still to fix after an optimisation
+remaining.failed = "optimisation failed: {error}"
+remaining.unreadable = "written file is unreadable: {error}"
+
+# Tabs
+tabs.analysis = "Analysis"
+tabs.comparison = "Comparison"
+tabs.report = "Report"
+
+# Analysis tab
+analysis.empty.title = "No analysis"
+analysis.empty.hint = "Choose the resource folder then run “Analyse”."
+analysis.stat.files = "Files"
+analysis.stat.to_optimise = "To optimise"
+analysis.stat.fivem = "> 16 MiB (FiveM)"
+analysis.settings_changed = "The settings have changed since the analysis: run “Analyse” again to update."
+analysis.only_problems = "Only files to optimise"
+analysis.filter = "Filter by name…"
+analysis.clear = "Clear"
+analysis.clear_hint = "Untick every file"
+analysis.toggle_all = "Tick / untick the displayed files"
+analysis.col.file = "File"
+analysis.col.type = "Type"
+analysis.col.physical = "Physical"
+analysis.col.virtual = "Virtual"
+analysis.col.summary = "Summary"
+analysis.compliant = "Compliant"
+analysis.issue_count = "{count} issue(s) to fix"
+analysis.nothing = "Nothing to report."
+
+# Comparison tab
+comparison.empty.title = "No comparison"
+comparison.empty.hint = "Select a file in the analysis then “Compare before / after”."
+comparison.optimise_hint = "Applies the current settings to this file only (according to the chosen output)"
+comparison.add_to_selection = "Add to the selection"
+comparison.wireframe = "Wireframe"
+comparison.alpha = "Alpha"
+comparison.alpha_hint = "Otherwise only the RGB colours are shown (specular alpha = glossiness)."
+comparison.dry_run = "Current settings applied; nothing is written to disk."
+comparison.nothing.title = "Nothing to compare"
+comparison.nothing.hint = "This file contains no mesh or texture that can be modified."
+comparison.before = "Before"
+comparison.after = "After"
+comparison.unchanged = "Unchanged"
+
+# Report tab
+report.empty.title = "No report"
+report.empty.hint = "The report appears here after “Optimise”."
+report.stat.optimised = "Optimised"
+report.stat.errors = "Errors"
+report.stat.disk = "Disk"
+report.stat.fivem = "> 16 MiB"
+report.open = "Open"
+report.save = "Save the report"
+report.file_name = "optistream-report.txt"
+report.by_resource = "By resource ({count})"
+report.col.resource = "Resource"
+report.root = "(root)"
+report.incomplete = "Incomplete export: {count} file(s) not written"
+report.incomplete_hint = "The optimisation was interrupted. Do not put this resource into production as it is."
+report.complete_export = "Complete the export"
+report.complete_export_hint = "Writes only the missing files to the destination"
+report.cancelled = "Optimisation cancelled: only some of the files were processed."
+report.no_remaining = "No warnings left on the optimised files."
+report.to_review = "To review ({count})"
+report.reoptimise_all = "Re-optimise all"
+report.reoptimise_all_hint = "Runs these files again with the current settings"
+report.review_hint = "Adjust the settings on the left (tolerance, sizes…), compare, then run again file by file."
+report.details = "Details of the changes"
+report.file_error = "{name}: {error}"

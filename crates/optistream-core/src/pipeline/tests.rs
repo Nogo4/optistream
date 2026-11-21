@@ -57,7 +57,7 @@ impl Method for Fake {
 
     fn analyze_file(&self, ctx: &FileCtx, data: &[u8], _: &Settings) -> Result<FileAnalysis> {
         if data == b"panic" {
-            panic!("analyse impossible");
+            panic!("analysis failed");
         }
         if data == b"fail" {
             bail!("illisible");
@@ -71,9 +71,9 @@ impl Method for Fake {
 
     fn optimize_file(&self, _: &FileCtx, data: &[u8], _: &Settings) -> Result<FileOutcome> {
         match data {
-            b"panic" => panic!("optimisation impossible"),
-            b"fail" => bail!("cassé"),
-            b"keep" => Ok(FileOutcome { warnings: vec!["rien à faire".into()], ..Default::default() }),
+            b"panic" => panic!("optimisation failed"),
+            b"fail" => bail!("broken"),
+            b"keep" => Ok(FileOutcome { warnings: vec!["nothing to do".into()], ..Default::default() }),
             _ => Ok(FileOutcome {
                 bytes: Some(data.to_ascii_uppercase()),
                 changes: vec!["upper".into()],
@@ -83,7 +83,7 @@ impl Method for Fake {
     }
 
     fn resource_checks(&self, files: &[FileCtx]) -> Vec<Issue> {
-        vec![Issue::info(format!("{} fichiers", files.len()))]
+        vec![Issue::info(format!("{} files", files.len()))]
     }
 
     fn prepare(&self, _: &[FileCtx], _: &Settings) -> Result<()> {
@@ -154,7 +154,7 @@ fn analysis_covers_handled_files_only() {
     assert_eq!(a.other_files, 2);
     assert_eq!(a.files[0].analysis.as_ref().unwrap().kind, "ydd");
     assert_eq!(a.files[1].analysis.as_ref().unwrap_err(), "illisible");
-    assert_eq!(a.resource_issues[0].text, "2 fichiers");
+    assert_eq!(a.resource_issues[0].text, "2 files");
     assert_eq!(method.prepared.load(Ordering::Relaxed), 1);
     assert_eq!((progress.done.load(Ordering::Relaxed), progress.total.load(Ordering::Relaxed)), (2, 2));
 }
@@ -163,7 +163,7 @@ fn analysis_covers_handled_files_only() {
 fn analysis_survives_a_panicking_file() {
     let fx = Fixture::new(&[("a.ydd", b"panic"), ("b.ydd", b"b")]);
     let a = analyze(&Fake::default(), &fx.root, &Settings::default(), None, &Progress::default()).unwrap();
-    assert!(a.files[0].analysis.as_ref().unwrap_err().contains("plantage interne : analyse impossible"));
+    assert!(a.files[0].analysis.as_ref().unwrap_err().contains("internal crash: analysis failed"));
     assert!(a.files[1].analysis.is_ok());
 }
 
@@ -176,10 +176,10 @@ fn oversized_files_get_size_issues() {
 
     let big = issues(0);
     assert_eq!(big.iter().map(|i| i.severity).collect::<Vec<_>>(), [Severity::Warning, Severity::Error]);
-    assert!(big[1].text.contains("mémoire physique déclarée 32.0 Mio"));
+    assert!(big[1].text.contains("declared physical memory 32.0 MiB"));
     // Files the settings leave untouched only get informational notes.
     let skipped = issues(1);
-    assert!(skipped.iter().all(|i| i.severity == Severity::Info && i.text.contains("ignoré")));
+    assert!(skipped.iter().all(|i| i.severity == Severity::Info && i.text.contains("ignored")));
     assert!(issues(2).is_empty());
 }
 
@@ -192,7 +192,7 @@ fn analysis_selection_is_extended_to_linked_files() {
     let rels: Vec<String> = a.files.iter().map(|f| crate::normalize_rel(&f.rel)).collect();
     assert_eq!(rels, ["stream/a.ydd", "stream/a_tex.ydd"]);
     // Resource-wide checks still cover every handled file.
-    assert_eq!(a.resource_issues[0].text, "3 fichiers");
+    assert_eq!(a.resource_issues[0].text, "3 files");
 }
 
 #[test]
@@ -220,13 +220,13 @@ fn export_writes_a_complete_copy() {
 
     assert_eq!(status_of(&report, "stream/a.ydd"), FileStatus::Optimized);
     assert_eq!(status_of(&report, "stream/keep.ydd"), FileStatus::Unchanged);
-    assert_eq!(status_of(&report, "stream/fail.ydd"), FileStatus::Error("cassé".into()));
-    assert!(matches!(status_of(&report, "stream/panic.ydd"), FileStatus::Error(e) if e.contains("plantage interne")));
+    assert_eq!(status_of(&report, "stream/fail.ydd"), FileStatus::Error("broken".into()));
+    assert!(matches!(status_of(&report, "stream/panic.ydd"), FileStatus::Error(e) if e.contains("internal crash")));
     // Report files are in resource order.
     let rels: Vec<&PathBuf> = report.files.iter().map(|f| &f.rel).collect();
     assert!(rels.windows(2).all(|w| w[0] < w[1]));
     let keep = report.files.iter().find(|f| f.rel.ends_with("keep.ydd")).unwrap();
-    assert_eq!(keep.warnings, ["rien à faire"]);
+    assert_eq!(keep.warnings, ["nothing to do"]);
 }
 
 #[test]
@@ -234,7 +234,7 @@ fn export_refuses_a_non_empty_destination() {
     let fx = Fixture::new(&[("a.ydd", b"a")]);
     write(&fx.out(), "myres/old.txt", b"old");
     let err = optimize(&Fake::default(), &fx.root, &Settings::default(), &export(fx.out()), None, &Progress::default()).unwrap_err();
-    assert!(err.to_string().contains("existe déjà"), "{err}");
+    assert!(err.to_string().contains("already exists"), "{err}");
 
     let overwrite = Output::Export { dir: fx.out(), overwrite: true };
     optimize(&Fake::default(), &fx.root, &Settings::default(), &overwrite, None, &Progress::default()).unwrap();
@@ -246,10 +246,10 @@ fn export_refuses_the_source_or_a_folder_inside_it() {
     let fx = Fixture::new(&[("a.ydd", b"a")]);
     let run = |dir: PathBuf| optimize(&Fake::default(), &fx.root, &Settings::default(), &export(dir), None, &Progress::default());
     let err = run(fx.tmp.path().to_path_buf()).unwrap_err();
-    assert!(err.to_string().contains("dossier source lui-même"), "{err}");
+    assert!(err.to_string().contains("source folder itself"), "{err}");
     fs::create_dir_all(fx.root.join("export")).unwrap();
     let err = run(fx.root.join("export")).unwrap_err();
-    assert!(err.to_string().contains("à l'intérieur de la ressource source"), "{err}");
+    assert!(err.to_string().contains("inside the source resource"), "{err}");
     assert_eq!(read(&fx.root, "a.ydd"), b"a");
 }
 
@@ -259,7 +259,7 @@ fn export_refuses_a_missing_folder_inside_the_source() {
     let fx = Fixture::new(&[("a.ydd", b"a")]);
     let output = export(fx.root.join("export"));
     let err = optimize(&Fake::default(), &fx.root, &Settings::default(), &output, None, &Progress::default()).unwrap_err();
-    assert!(err.to_string().contains("à l'intérieur de la ressource source"), "{err}");
+    assert!(err.to_string().contains("inside the source resource"), "{err}");
     assert!(!fx.root.join("export").exists());
 }
 
@@ -335,7 +335,7 @@ fn cancelled_export_reports_every_missing_file() {
     assert!(report.cancelled);
     assert!(report.files.is_empty());
     assert_eq!(report.not_written, [PathBuf::from("a.ydd"), PathBuf::from("b.ydd"), PathBuf::from("fxmanifest.lua")]);
-    assert!(report.to_text().contains("ATTENTION : 3 fichier(s) non écrit(s)"));
+    assert!(report.to_text().contains("WARNING: 3 file(s) not written"));
 }
 
 #[test]
@@ -360,5 +360,5 @@ fn report_groups_files_by_resource() {
     let resources: Vec<PathBuf> = report.files.iter().map(|f| f.resource.clone()).collect();
     assert_eq!(resources, [Path::new("[cat]").join("res1"), Path::new("[cat]").join("res2")]);
     assert_eq!(report.by_resource().len(), 2);
-    assert!(report.to_text().contains("Par ressource"));
+    assert!(report.to_text().contains("Per resource"));
 }

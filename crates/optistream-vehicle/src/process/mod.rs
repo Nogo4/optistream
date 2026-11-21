@@ -22,6 +22,7 @@ pub use preview::preview;
 
 use std::collections::HashSet;
 
+use optistream_i18n::t;
 use optistream_mapping::roles::Usage;
 use optistream_rage::drawable::DrawableInfo;
 use optistream_rage::texture::TextureEntry;
@@ -69,18 +70,18 @@ pub enum Class {
     Livery,
     /// Smaller side ≥ 1024 px.
     Big,
-    /// Everything else: only with « Réduire aussi les petites textures ».
+    /// Everything else: only with "Reduce small textures too".
     Small,
 }
 
 impl Class {
     pub fn label(self) -> &'static str {
         match self {
-            Class::HiCopy => "copie +hi",
-            Class::Last => "feux / vitres",
-            Class::Livery => "livrée",
-            Class::Big => "grande",
-            Class::Small => "petite",
+            Class::HiCopy => t("vehicle.class.hi_copy"),
+            Class::Last => t("vehicle.class.last"),
+            Class::Livery => t("vehicle.class.livery"),
+            Class::Big => t("vehicle.class.big"),
+            Class::Small => t("vehicle.class.small"),
         }
     }
 }
@@ -116,7 +117,7 @@ impl Tex {
 
     pub fn label(&self) -> String {
         match self.usage {
-            Usage::Protected => "protégée".to_owned(),
+            Usage::Protected => t("vehicle.tex.protected").to_owned(),
             Usage::Role(r) => format!("{}, {}", r.label(), self.class.label()),
         }
     }

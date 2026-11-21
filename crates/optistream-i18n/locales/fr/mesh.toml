@@ -1,0 +1,15 @@
+# mesh messages (fr). Keys are looked up as "mesh.<key>".
+
+# Geometry reduction: changes
+change.merged_vertices = "sommets identiques fusionnés (sans perte) : {before} → {after}"
+change.lod_triangles = "géométrie {part} LOD {lod} : {before} → {after} triangles (écart max {error} %)"
+part.main = "principale"
+part.piece = "pièce {index}"
+
+# Geometry reduction: warnings
+warning.nothing_reducible = "mémoire virtuelle {size} (budget {budget}) : aucune géométrie réductible dans la tolérance"
+warning.over_budget = "mémoire virtuelle : reste à {size} (budget {budget}) : tolérance ou plancher du LOD High atteints"
+
+# Errors
+error.outside_system = "données de géométrie hors du segment système"
+error.buffers_changed = "tampons de géométrie différents de la lecture d'origine"

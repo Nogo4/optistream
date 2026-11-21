@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::Result;
+use optistream_i18n::{t, tf};
 use optistream_core::{
     resource_prefix, FileAnalysis, FileCtx, FileOutcome, Issue, MANIFESTS, Method, ParamSpec, Preset, PreviewItem,
     Settings,
@@ -73,13 +74,13 @@ fn build_index(root: &Path, prefix: &str, all_files: &HashSet<String>) -> RoleIn
 /// Why the settings or the file itself leave it untouched, if they do.
 fn skip_reason(cfg: &Config, data: &[u8]) -> Option<String> {
     if data.starts_with(b"FXAP") {
-        return Some("chiffré (FXAP) : illisible, laissé tel quel".to_owned());
+        return Some(t("mapping.skip.encrypted").to_owned());
     }
     if !Resource::is_rsc7(data) {
-        return Some("format inconnu (pas un RSC7)".to_owned());
+        return Some(t("mapping.skip.unknown_format").to_owned());
     }
     cfg.below_min_physical(data)
-        .then(|| format!("mémoire physique ≤ {} Mio, seuil « Mémoire physique minimale »", cfg.min_physical / (1024 * 1024)))
+        .then(|| tf!("mapping.skip.below_min_physical", size = cfg.min_physical / (1024 * 1024)))
 }
 
 fn kind_of(ctx: &FileCtx) -> Option<Kind> {
@@ -92,11 +93,11 @@ impl Method for MappingMethod {
     }
 
     fn label(&self) -> &'static str {
-        "Mappings / MLO"
+        t("mapping.method.label")
     }
 
     fn description(&self) -> &'static str {
-        "Maps et MLO : textures (.ytd et embarquées dans les .ydr / .ydd). Accepte une ressource ou un dossier de catégorie entier ([oren-mappings])."
+        t("mapping.method.description")
     }
 
     fn params(&self) -> Vec<ParamSpec> {
@@ -119,7 +120,7 @@ impl Method for MappingMethod {
         let cfg = Config::from_settings(settings);
         let kind = kind_of(ctx).expect("handled file");
         if let Some(reason) = skip_reason(&cfg, data) {
-            return Ok(FileAnalysis { kind: kind.label().into(), summary: format!("ignoré ({reason})"), skipped: true, ..Default::default() });
+            return Ok(FileAnalysis { kind: kind.label().into(), summary: tf!("mapping.skip.summary", reason = reason), skipped: true, ..Default::default() });
         }
         let p = process::parse(kind, data, &self.index_for(ctx))?;
         Ok(process::analyze(&p, &cfg))
@@ -150,7 +151,7 @@ impl Method for MappingMethod {
             .map(|f| f.rsplit_once('/').map(|(d, _)| d.to_owned()).unwrap_or_default())
             .collect();
         if resources.len() > 1 {
-            vec![Issue::info(format!("{} ressources détectées dans le dossier : chacune est traitée séparément", resources.len()))]
+            vec![Issue::info(tf!("mapping.resources_detected", count = resources.len()))]
         } else {
             Vec::new()
         }
@@ -160,7 +161,7 @@ impl Method for MappingMethod {
         let cfg = Config::from_settings(settings);
         let kind = kind_of(ctx).expect("handled file");
         if let Some(reason) = skip_reason(&cfg, data) {
-            anyhow::bail!("fichier ignoré ({reason}) : rien à comparer.");
+            anyhow::bail!(tf!("mapping.skip.preview", reason = reason));
         }
         process::preview(kind, data, &cfg, &self.index_for(ctx))
     }

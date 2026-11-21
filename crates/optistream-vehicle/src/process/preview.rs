@@ -4,10 +4,12 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use optistream_core::{PreviewContent, PreviewImage, PreviewItem};
+use optistream_i18n::tf;
 use optistream_texture::format::{self as fmt};
 use optistream_texture::{ops, plan, Rgba8, TextureMeta};
 
 use crate::config::Config;
+use crate::process::budget::reduction;
 use crate::process::parse::tex_data;
 use crate::process::{parse, plan_file, FileInfo, Kind};
 use optistream_texture::budget::BlockPlan;
@@ -20,7 +22,14 @@ fn preview_image(img: &Rgba8) -> PreviewImage {
 }
 
 fn tex_desc(w: u32, h: u32, format: u32, levels: u32, bytes: usize) -> String {
-    format!("{w}×{h} {} · {levels} mips · {:.2} Mio", fmt::name(format), bytes as f64 / 1048576.0)
+    tf!(
+        "vehicle.preview.texture_desc",
+        width = w,
+        height = h,
+        format = fmt::name(format),
+        levels = levels,
+        size = format!("{:.2}", bytes as f64 / 1048576.0),
+    )
 }
 
 pub fn preview(kind: Kind, bytes: &[u8], cfg: &Config, index: &VehicleIndex, info: &FileInfo) -> Result<Vec<PreviewItem>> {
@@ -38,21 +47,22 @@ pub fn preview(kind: Kind, bytes: &[u8], cfg: &Config, index: &VehicleIndex, inf
         let Ok(before) = plan::decode_top(&meta, data) else { continue };
         let before_desc = tex_desc(meta.width, meta.height, meta.format, meta.levels, t.data_len);
         let (after, after_desc) = match by_texture.get(&i) {
-            _ if t.usage == Usage::Protected => (None, "protégée : non modifiée".to_owned()),
+            _ if t.usage == Usage::Protected => (None, optistream_i18n::t("vehicle.preview.protected").to_owned()),
             Some(b) if b.enc.is_some() => {
                 let enc = b.enc.as_ref().unwrap();
                 let m = TextureMeta { width: enc.width, height: enc.height, format: enc.format, levels: enc.levels };
                 let img = plan::decode_top(&m, &enc.data)?;
                 let mut desc = tex_desc(enc.width, enc.height, enc.format, enc.levels, enc.data.len());
                 if b.steps > 0 {
-                    desc += &format!(" · réduction ciblée ÷{} (perte {:.1} %){}", 1u32 << b.steps, b.loss, if b.forced { ", forcée" } else { "" });
+                    desc += " · ";
+                    desc += &reduction(b);
                 }
                 (Some(preview_image(&img)), desc)
             }
-            _ => (None, "non modifiée".to_owned()),
+            _ => (None, optistream_i18n::t("vehicle.preview.unchanged").to_owned()),
         };
         items.push(PreviewItem {
-            title: format!("Texture {} ({})", t.entry.name, t.label()),
+            title: tf!("vehicle.preview.title", name = t.entry.name, label = t.label()),
             before_desc,
             after_desc,
             content: PreviewContent::Texture { before: preview_image(&before), after },

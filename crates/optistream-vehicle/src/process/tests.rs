@@ -166,7 +166,7 @@ fn block(enc: bool, steps: u32, forced: bool) -> optistream_texture::budget::Blo
         levels: 9,
         stride: 512,
         data: Vec::new(),
-        changes: vec!["DXT5 → DXT1".into(), "mipmaps complétés".into()],
+        changes: vec!["DXT5 → DXT1".into(), "mipmaps completed".into()],
     });
     optistream_texture::budget::BlockPlan { off: 0, users: vec![0], enc, steps, loss: 2.44, forced }
 }
@@ -179,10 +179,10 @@ fn describe_reports_changes_and_targeted_reduction() {
     assert_eq!(describe(&p, &block(false, 1, false)), None);
     let plain = describe(&p, &block(true, 0, false)).unwrap();
     assert!(plain.starts_with("texture carter_sign_1 ("), "{plain}");
-    assert!(plain.contains("DXT5 → DXT1, mipmaps complétés"), "{plain}");
-    assert!(!plain.contains("réduction ciblée"), "{plain}");
+    assert!(plain.contains("DXT5 → DXT1, mipmaps completed"), "{plain}");
+    assert!(!plain.contains("targeted reduction"), "{plain}");
     let reduced = describe(&p, &block(true, 2, false)).unwrap();
-    assert!(reduced.contains("÷4 (perte 2.4 %)") && !reduced.contains("forcée"), "{reduced}");
+    assert!(reduced.contains("targeted reduction ÷4 (loss 2.4 %)") && !reduced.contains("forced"), "{reduced}");
     let forced = describe(&p, &block(true, 3, true)).unwrap();
-    assert!(forced.contains("÷8") && forced.ends_with(", forcée"), "{forced}");
+    assert!(forced.contains("÷8") && forced.ends_with(", forced"), "{forced}");
 }

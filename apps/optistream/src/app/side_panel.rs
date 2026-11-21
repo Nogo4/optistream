@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use eframe::egui::{self, CornerRadius, Margin, RichText, Stroke, Ui, Vec2};
 use egui_material_icons::icons::*;
 use optistream_core::{ParamKind, Value};
+use optistream_i18n::{t, tf};
 
 use crate::app::{App, OutputMode};
 use crate::theme::{self, ACCENT, BG, BORDER, TEXT, WARN, WEAK};
@@ -26,8 +27,8 @@ impl App {
 
     pub(super) fn steps(&mut self, ui: &mut Ui, busy: bool) {
         ui.add_enabled_ui(!busy, |ui| {
-            theme::card(ui, 1, ICON_APPAREL, "Ressource", |ui| {
-                ui.label(RichText::new("Type").small().color(WEAK));
+            theme::card(ui, 1, ICON_APPAREL, t("app.side.resource.title"), |ui| {
+                ui.label(RichText::new(t("app.side.resource.type")).small().color(WEAK));
                 let current = self.methods[self.method].label();
                 let mut changed = false;
                 egui::ComboBox::from_id_salt("method")
@@ -44,13 +45,13 @@ impl App {
                 }
                 ui.label(RichText::new(self.methods[self.method].description()).small().color(WEAK));
                 ui.add_space(4.0);
-                ui.label(RichText::new("Dossier de la ressource (ou d'une catégorie [...])").small().color(WEAK));
-                theme::path_field(ui, &mut self.source, "Choisir le dossier de la ressource");
+                ui.label(RichText::new(t("app.side.resource.folder")).small().color(WEAK));
+                theme::path_field(ui, &mut self.source, t("app.side.resource.pick"));
             });
             ui.add_space(8.0);
-            theme::card(ui, 2, ICON_TUNE, "Réglages", |ui| self.settings_ui(ui));
+            theme::card(ui, 2, ICON_TUNE, t("app.side.settings.title"), |ui| self.settings_ui(ui));
             ui.add_space(8.0);
-            theme::card(ui, 3, ICON_OUTPUT, "Sortie", |ui| self.output_ui(ui));
+            theme::card(ui, 3, ICON_OUTPUT, t("app.side.output.title"), |ui| self.output_ui(ui));
         });
     }
 
@@ -58,11 +59,11 @@ impl App {
         let ready = self.source.is_some() && !busy;
         let half = (ui.available_width() - 8.0) / 2.0;
         ui.horizontal(|ui| {
-            if theme::secondary_button(ui, ready, ICON_SEARCH, "Analyser", half).clicked() {
+            if theme::secondary_button(ui, ready, ICON_SEARCH, t("app.side.analyse"), half).clicked() {
                 self.start_analysis(ctx);
             }
-            if theme::secondary_button(ui, ready && self.selected.is_some(), ICON_COMPARE, "Comparer", half)
-                .on_hover_text("Comparer avant / après le fichier sélectionné dans l'analyse")
+            if theme::secondary_button(ui, ready && self.selected.is_some(), ICON_COMPARE, t("app.common.compare"), half)
+                .on_hover_text(t("app.side.compare_hint"))
                 .clicked()
             {
                 if let Some(rel) = self.selected_rel() {
@@ -73,8 +74,8 @@ impl App {
         ui.add_space(4.0);
         // Ticked files turn the main action into a partial optimisation.
         let text = match self.checked.len() {
-            0 => "Optimiser toute la ressource".to_owned(),
-            n => format!("Optimiser la sélection ({n})"),
+            0 => t("app.side.optimise_all").to_owned(),
+            n => tf!("app.common.optimise_selection", count = n),
         };
         if theme::primary_button(ui, ready, ICON_BOLT, &text).clicked() {
             let only = (!self.checked.is_empty()).then(|| self.checked.clone());
@@ -113,10 +114,10 @@ impl App {
                 *current = value;
             }
         };
-        option(ui, &mut self.output, OutputMode::Export, ICON_DRIVE_FILE_MOVE, "Exporter", "Nouvelle ressource optimisée, l'originale reste intacte");
+        option(ui, &mut self.output, OutputMode::Export, ICON_DRIVE_FILE_MOVE, t("app.side.output.export"), t("app.side.output.export_hint"));
         if self.output == OutputMode::Export {
             ui.add_space(2.0);
-            theme::path_field(ui, &mut self.export_dir, "Choisir le dossier d'export");
+            theme::path_field(ui, &mut self.export_dir, t("app.side.output.export_pick"));
             if let (Some(src), Some(dir)) = (&self.source, &self.export_dir) {
                 if let Some(name) = src.file_name() {
                     ui.horizontal(|ui| {
@@ -125,12 +126,12 @@ impl App {
                     });
                 }
             }
-            ui.checkbox(&mut self.overwrite, "Écraser si le dossier existe déjà");
+            ui.checkbox(&mut self.overwrite, t("app.side.output.overwrite"));
             ui.add_space(4.0);
         }
-        option(ui, &mut self.output, OutputMode::InPlace, ICON_EDIT_DOCUMENT, "Modifier sur place", "Remplace les fichiers du dossier source");
+        option(ui, &mut self.output, OutputMode::InPlace, ICON_EDIT_DOCUMENT, t("app.side.output.in_place"), t("app.side.output.in_place_hint"));
         if self.output == OutputMode::InPlace {
-            theme::icon_line(ui, ICON_WARNING, WARN, "Sans sauvegarde : les fichiers d'origine sont remplacés.");
+            theme::icon_line(ui, ICON_WARNING, WARN, t("app.side.output.in_place_warning"));
         }
     }
 
@@ -161,8 +162,8 @@ impl App {
             None => {
                 ui.horizontal(|ui| {
                     ui.label(theme::icon(ICON_TUNE, 14.0, WARN));
-                    ui.label(RichText::new("Réglages personnalisés").small().color(WARN));
-                    if ui.small_button(theme::label(ICON_RESTART_ALT, "Par défaut")).clicked() {
+                    ui.label(RichText::new(t("app.side.settings.custom")).small().color(WARN));
+                    if ui.small_button(theme::label(ICON_RESTART_ALT, t("app.side.settings.default"))).clicked() {
                         self.settings = method.default_settings();
                     }
                 });
@@ -178,13 +179,15 @@ impl App {
             }
         }
         for group in groups {
-            let ic = match group {
-                "Textures" => ICON_TEXTURE,
-                "Maillages" => ICON_VIEW_IN_AR,
+            // Group names are translated: the icon and widget ids come from the group's first setting key.
+            let first_key = params.iter().find(|p| p.group == group).map_or("", |p| p.key);
+            let ic = match first_key.split('.').next() {
+                Some("tex") => ICON_TEXTURE,
+                Some("mesh") => ICON_VIEW_IN_AR,
                 _ => ICON_TUNE,
             };
-            egui::CollapsingHeader::new(theme::label(ic, group)).id_salt(group).default_open(false).show(ui, |ui| {
-                egui::Grid::new(group).num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            egui::CollapsingHeader::new(theme::label(ic, group)).id_salt(first_key).default_open(false).show(ui, |ui| {
+                egui::Grid::new(first_key).num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
                     for p in params.iter().filter(|p| p.group == group) {
                         ui.label(RichText::new(p.label).small()).on_hover_text(p.help);
                         match &p.kind {

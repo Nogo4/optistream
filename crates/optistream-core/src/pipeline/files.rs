@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{bail, Result};
+use optistream_i18n::{t, tf};
 
 use crate::method::{normalize_rel, FileCtx};
 
@@ -46,8 +47,8 @@ pub(super) fn guarded<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
                 .downcast_ref::<String>()
                 .cloned()
                 .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
-                .unwrap_or_else(|| "cause inconnue".to_owned());
-            bail!("plantage interne : {msg}")
+                .unwrap_or_else(|| t("core.error.unknown_cause").to_owned());
+            bail!(tf!("core.error.internal_crash", msg = msg))
         }
     }
 }
@@ -72,11 +73,11 @@ mod tests {
     #[test]
     fn guarded_turns_panics_into_errors() {
         let msg = |e: anyhow::Error| e.to_string();
-        assert_eq!(msg(guarded(|| -> Result<()> { panic!("static") }).unwrap_err()), "plantage interne : static");
+        assert_eq!(msg(guarded(|| -> Result<()> { panic!("static") }).unwrap_err()), "internal crash: static");
         let n = 3;
-        assert_eq!(msg(guarded(|| -> Result<()> { panic!("value {n}") }).unwrap_err()), "plantage interne : value 3");
+        assert_eq!(msg(guarded(|| -> Result<()> { panic!("value {n}") }).unwrap_err()), "internal crash: value 3");
         let e = guarded(|| -> Result<()> { std::panic::panic_any(42u8) }).unwrap_err();
-        assert_eq!(msg(e), "plantage interne : cause inconnue");
+        assert_eq!(msg(e), "internal crash: unknown cause");
     }
 
     #[test]

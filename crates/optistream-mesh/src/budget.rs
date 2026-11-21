@@ -12,6 +12,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::{bail, Result};
+use optistream_i18n::{t, tf};
 use optistream_rage::drawable::{self, component, geom_field, ib_field, semantic, vb_field, DrawableInfo, GeometryInfo};
 use optistream_rage::sys::{self, RawBuffer};
 use optistream_rage::{Resource, Segment};
@@ -95,7 +96,7 @@ fn raw_buffers(res: &Resource, geoms: &[(usize, usize, GeometryInfo)]) -> Result
         let mut ptrs = vec![(g.vertex_ptr, vlen), (g.vertex_ptr2, vlen), (g.index_ptr, g.index_count as usize * 2)];
         ptrs.retain(|&(p, _)| p != 0);
         for (p, len) in ptrs {
-            let Some(o) = sys_off(res, p) else { bail!("données de géométrie hors du segment système") };
+            let Some(o) = sys_off(res, p) else { bail!(t("mesh.error.outside_system")) };
             let e = out.entry(o).or_insert(len);
             *e = (*e).max(len);
         }
@@ -115,7 +116,7 @@ impl Buffers {
         let used = raw_buffers(res, geoms)?;
         let mut allocated = raw_buffers(res, &geometries(original))?;
         if allocated.len() != used.len() || allocated.keys().ne(used.keys()) {
-            bail!("tampons de géométrie différents de la lecture d'origine");
+            bail!(t("mesh.error.buffers_changed"));
         }
         for (o, len) in &used {
             let a = allocated.get_mut(o).expect("same keys");
@@ -195,7 +196,7 @@ fn group(n: u64) -> String {
 }
 
 pub fn mib(bytes: u64) -> String {
-    format!("{:.1} Mio", bytes as f64 / (1024.0 * 1024.0))
+    tf!("core.size.mib", size = format!("{:.1}", bytes as f64 / (1024.0 * 1024.0)))
 }
 
 /// Plans the re-layout of the system segment and, if it stays above the budget, the
@@ -295,7 +296,7 @@ pub fn plan(
         current_writes(&geoms, &applied, &share, &cache, &base).into_iter().map(|(g, d)| (g.clone(), d.clone())).collect();
     if writes.is_empty() {
         if relaid > limits.budget {
-            warnings.push(format!("mémoire virtuelle {} (budget {}) : aucune géométrie réductible dans la tolérance", mib(relaid), mib(limits.budget)));
+            warnings.push(tf!("mesh.warning.nothing_reducible", size = mib(relaid), budget = mib(limits.budget)));
         }
         return Ok(GeoPlan { writes, changes: Vec::new(), warnings, virtual_after: relaid });
     }
@@ -307,7 +308,7 @@ pub fn plan(
         .filter_map(|((_, _, g), b)| b.as_ref().map(|d| (g.vertex_count as u64, d.vertex_count(g.vertex_stride as usize) as u64)))
         .fold((0, 0), |(a, b), (x, y)| (a + x, b + y));
     if merged_before > 0 {
-        changes.push(format!("sommets identiques fusionnés (sans perte) : {} → {}", group(merged_before), group(merged_after)));
+        changes.push(tf!("mesh.change.merged_vertices", before = group(merged_before), after = group(merged_after)));
     }
     // Triangle changes per drawable and LOD.
     for (di, _) in current.iter().enumerate() {
@@ -330,22 +331,19 @@ pub fn plan(
             if !touched || after_t == before_t {
                 continue;
             }
-            changes.push(format!(
-                "géométrie {} LOD {} : {} → {} triangles (écart max {:.2} %)",
-                if di == 0 { "principale".to_owned() } else { format!("pièce {di}") },
-                drawable::LOD_NAMES[lod],
-                group(before_t),
-                group(after_t),
-                err * 100.0
+            let part = if di == 0 { t("mesh.part.main").to_owned() } else { tf!("mesh.part.piece", index = di) };
+            changes.push(tf!(
+                "mesh.change.lod_triangles",
+                part = part,
+                lod = drawable::LOD_NAMES[lod],
+                before = group(before_t),
+                after = group(after_t),
+                error = format!("{:.2}", err * 100.0)
             ));
         }
     }
     if size > limits.budget {
-        warnings.push(format!(
-            "mémoire virtuelle : reste à {} (budget {}) : tolérance ou plancher du LOD High atteints",
-            mib(size),
-            mib(limits.budget)
-        ));
+        warnings.push(tf!("mesh.warning.over_budget", size = mib(size), budget = mib(limits.budget)));
     }
     Ok(GeoPlan { writes, changes, warnings, virtual_after: size })
 }

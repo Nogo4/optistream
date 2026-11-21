@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use eframe::egui::{self, CornerRadius, Margin, RichText, Stroke, Ui, Vec2};
 use egui_material_icons::icons::*;
 use optistream_core::{PreviewContent, PreviewItem};
+use optistream_i18n::t;
 
 use crate::app::preview::{load_image, load_preview, side};
 use crate::app::App;
@@ -17,8 +18,8 @@ impl App {
             theme::empty_state(
                 ui,
                 ICON_COMPARE,
-                "Aucune comparaison",
-                "Sélectionne un fichier dans l'analyse puis « Comparer avant / après ».",
+                t("app.comparison.empty.title"),
+                t("app.comparison.empty.hint"),
             );
             return;
         };
@@ -28,13 +29,13 @@ impl App {
             ui.label(theme::icon(ICON_DEPLOYED_CODE, 18.0, ACCENT));
             ui.add(egui::Label::new(RichText::new(file.display().to_string()).strong()).truncate());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let b = egui::Button::new(RichText::new(theme::label(ICON_BOLT, "Optimiser ce fichier")).color(theme::ACCENT_TEXT).strong())
+                let b = egui::Button::new(RichText::new(theme::label(ICON_BOLT, t("app.common.optimise_file"))).color(theme::ACCENT_TEXT).strong())
                     .fill(ACCENT);
-                if ui.add_enabled(self.job.is_none(), b).on_hover_text("Applique les réglages actuels à ce seul fichier (selon la sortie choisie)").clicked() {
+                if ui.add_enabled(self.job.is_none(), b).on_hover_text(t("app.comparison.optimise_hint")).clicked() {
                     optimize_now = Some(HashSet::from([file.clone()]));
                 }
                 let mut v = self.checked.contains(file);
-                if ui.checkbox(&mut v, "Ajouter à la sélection").changed() {
+                if ui.checkbox(&mut v, t("app.comparison.add_to_selection")).changed() {
                     tick = Some(v);
                 }
             });
@@ -58,10 +59,10 @@ impl App {
             ui.label(theme::icon(ICON_ROTATE_RIGHT, 18.0, WEAK));
             ui.add(egui::Slider::new(&mut self.yaw, -180.0..=180.0).suffix("°"));
             ui.add_space(10.0);
-            ui.checkbox(&mut self.wireframe, theme::label(ICON_GRID_ON, "Fil de fer"));
+            ui.checkbox(&mut self.wireframe, theme::label(ICON_GRID_ON, t("app.comparison.wireframe")));
             if ui
-                .checkbox(&mut self.show_alpha, theme::label(ICON_OPACITY, "Alpha"))
-                .on_hover_text("Sinon seules les couleurs RVB sont affichées (l'alpha des spéculaires = brillance).")
+                .checkbox(&mut self.show_alpha, theme::label(ICON_OPACITY, t("app.comparison.alpha")))
+                .on_hover_text(t("app.comparison.alpha_hint"))
                 .changed()
             {
                 let ctx = ui.ctx().clone();
@@ -69,10 +70,10 @@ impl App {
                 self.previews = items.into_iter().enumerate().map(|(i, item)| load_preview(&ctx, i, item, self.show_alpha)).collect();
             }
         });
-        theme::icon_line(ui, ICON_INFO, WEAK, "Réglages actuels appliqués ; rien n'est écrit sur le disque.");
+        theme::icon_line(ui, ICON_INFO, WEAK, t("app.comparison.dry_run"));
         ui.add_space(4.0);
         if self.previews.is_empty() {
-            theme::empty_state(ui, ICON_COMPARE, "Rien à comparer", "Ce fichier ne contient ni maillage ni texture modifiable.");
+            theme::empty_state(ui, ICON_COMPARE, t("app.comparison.nothing.title"), t("app.comparison.nothing.hint"));
             return;
         }
 
@@ -111,9 +112,9 @@ impl App {
                             _ => size,
                         };
                         ui.horizontal_top(|ui| {
-                            side(ui, "Avant", &p.item.before_desc, p.before.as_ref(), size, WEAK);
+                            side(ui, t("app.comparison.before"), &p.item.before_desc, p.before.as_ref(), size, WEAK);
                             ui.add_space(8.0);
-                            side(ui, "Après", &p.item.after_desc, p.after.as_ref(), after_size, ACCENT);
+                            side(ui, t("app.comparison.after"), &p.item.after_desc, p.after.as_ref(), after_size, ACCENT);
                         });
                     });
                 ui.add_space(8.0);

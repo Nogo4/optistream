@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::{ensure, Result};
+use optistream_i18n::{t, tf};
 use optistream_rage::drawable::{component, semantic, vb_field, DrawableInfo, GeometryInfo};
 use optistream_rage::{Resource, Segment};
 
@@ -28,12 +29,12 @@ fn write_uv(v: &mut [u8], off: usize, ty: u8, uv: [f32; 2]) {
 
 /// TEXCOORD0 layout of a geometry: `None` when it has none (nothing sampled).
 fn uv_layout(g: &GeometryInfo) -> Result<Option<(usize, u8)>> {
-    ensure!(!g.decl.is_cloth(), "géométrie cloth");
+    ensure!(!g.decl.is_cloth(), t("clothing.crop.cloth_geometry"));
     if !g.decl.has(semantic::TEXCOORD0) {
         return Ok(None);
     }
     let ty = g.decl.component_type(semantic::TEXCOORD0);
-    ensure!(matches!(ty, component::FLOAT2 | component::HALF2), "UV de type {ty}");
+    ensure!(matches!(ty, component::FLOAT2 | component::HALF2), tf!("clothing.crop.uv_type", ty = ty));
     Ok(Some((g.decl.component_offset(semantic::TEXCOORD0), ty)))
 }
 
@@ -43,13 +44,13 @@ pub(super) fn uv_bounds(res: &Resource, d: &DrawableInfo, b: &mut Bounds) -> Res
         let Some((off, ty)) = uv_layout(g)? else { continue };
         let stride = g.vertex_stride as usize;
         let ptr = if g.vertex_ptr != 0 { g.vertex_ptr } else { g.vertex_ptr2 };
-        ensure!(matches!(res.resolve(ptr), Some((Segment::System, _))), "sommets hors du segment système");
+        ensure!(matches!(res.resolve(ptr), Some((Segment::System, _))), t("clothing.crop.vertices_outside"));
         let verts = res.slice(ptr, g.vertex_count as usize * stride)?;
         let indices = res.slice(g.index_ptr, g.index_count as usize * 2)?;
         for i in indices.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]) as usize) {
-            ensure!(i < g.vertex_count as usize, "indice hors du tampon de sommets");
+            ensure!(i < g.vertex_count as usize, t("clothing.crop.index_outside"));
             let [u, v] = read_uv(&verts[i * stride..], off, ty);
-            ensure!(u.is_finite() && v.is_finite(), "UV invalide");
+            ensure!(u.is_finite() && v.is_finite(), t("clothing.crop.invalid_uv"));
             b[0] = b[0].min(u as f64);
             b[1] = b[1].max(u as f64);
             b[2] = b[2].min(v as f64);

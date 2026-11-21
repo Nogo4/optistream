@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::{bail, ensure, Result};
+use optistream_i18n::{t, tf};
 use optistream_mesh::{decimate, reorder_indices, Decimated, GeometryData};
 use optistream_rage::drawable::{self, geom_field, ib_field, vb_field, DrawableInfo, GeometryInfo, ShaderInfo};
 use optistream_rage::{Resource, Segment};
@@ -150,14 +151,14 @@ impl ReorderPlan {
 
     pub(super) fn describe(&self) -> String {
         let acmr = |cost: f64, tris: u64| if tris == 0 { 0.0 } else { cost / tris as f64 };
-        let mut s = format!(
-            "ordre des triangles optimisé : {} géométrie(s), ACMR {:.2} → {:.2}",
-            self.writes.len(),
-            acmr(self.cost_before, self.triangles_before),
-            acmr(self.cost_after, self.triangles_after)
+        let mut s = tf!(
+            "clothing.change.reorder",
+            count = self.writes.len(),
+            before = format!("{:.2}", acmr(self.cost_before, self.triangles_before)),
+            after = format!("{:.2}", acmr(self.cost_after, self.triangles_after))
         );
         if self.removed_triangles > 0 {
-            s += &format!(", {} triangle(s) dégénéré(s) ou en double retiré(s)", group(self.removed_triangles as u64));
+            s += &tf!("clothing.change.reorder_removed", count = group(self.removed_triangles as u64));
         }
         s
     }
@@ -285,22 +286,19 @@ pub(super) fn optimize_meshes(
                 high_after = after;
             }
             if after < before {
-                let mut c = format!(
-                    "LOD {} : {} → {} triangles (écart {:.2} %)",
-                    drawable::LOD_NAMES[lod],
-                    group(before),
-                    group(after),
-                    max_err * 100.0
+                let mut c = tf!(
+                    "clothing.change.lod",
+                    lod = drawable::LOD_NAMES[lod],
+                    before = group(before),
+                    after = group(after),
+                    error = format!("{:.2}", max_err * 100.0)
                 );
                 if after > target {
-                    c += " — limité par la tolérance";
+                    c += t("clothing.change.lod_limited");
                 }
                 changes.push(c);
             } else if lod == 0 {
-                warnings.push(format!(
-                    "LOD High {} triangles : aucune réduction possible sans dépasser la tolérance",
-                    group(before)
-                ));
+                warnings.push(tf!("clothing.warning.lod_no_reduction", triangles = group(before)));
             }
         }
     }

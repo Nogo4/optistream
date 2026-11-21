@@ -1,0 +1,12 @@
+[package]
+name = "optistream-i18n"
+description = "User interface languages: language selection and per-language message catalogues"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sys-locale.workspace = true
+
+[dev-dependencies]
+walkdir.workspace = true

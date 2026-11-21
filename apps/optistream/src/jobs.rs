@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use optistream_core::{Analysis, FileCtx, Method, Output, PreviewItem, Progress, Report, Settings};
+use optistream_i18n::t;
 
 pub enum JobResult {
     /// `partial`: only some files were analysed, to be merged into the current analysis.
@@ -35,7 +36,7 @@ impl Job {
         let handle = std::thread::spawn(move || {
             // A panic must surface as an error instead of a job that never finishes.
             let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(&p)))
-                .unwrap_or_else(|_| Err("plantage interne pendant la tâche".to_owned()));
+                .unwrap_or_else(|_| Err(t("app.job.crashed").to_owned()));
             *r.lock().unwrap() = Some(out);
             ctx.request_repaint();
         });
@@ -61,7 +62,7 @@ pub fn analyze(
     settings: Settings,
     only: Option<HashSet<PathBuf>>,
 ) -> Job {
-    Job::spawn("Analyse", ctx, move |p| {
+    Job::spawn(t("app.job.analysis"), ctx, move |p| {
         optistream_core::analyze(method.as_ref(), &root, &settings, only.as_ref(), p)
             .map(|analysis| JobResult::Analysis { analysis, partial: only.is_some() })
             .map_err(|e| format!("{e:#}"))
@@ -76,13 +77,13 @@ pub fn optimize(
     output: Output,
     only: Option<HashSet<PathBuf>>,
 ) -> Job {
-    Job::spawn("Optimisation", ctx, move |p| {
+    Job::spawn(t("app.job.optimisation"), ctx, move |p| {
         let report = optistream_core::optimize(method.as_ref(), &root, &settings, &output, only.as_ref(), p)
             .map_err(|e| format!("{e:#}"))?;
         // Re-analyse what was written so the report lists what is still left to fix.
         let written: HashSet<PathBuf> = report.files.iter().map(|f| f.rel.clone()).collect();
         if let Ok(mut current) = p.current.lock() {
-            *current = "Vérification des fichiers produits…".to_owned();
+            *current = t("app.job.verifying").to_owned();
         }
         let verification = if report.cancelled || written.is_empty() {
             None
@@ -94,7 +95,7 @@ pub fn optimize(
 }
 
 pub fn preview(ctx: eframe::egui::Context, method: Arc<dyn Method>, file: FileCtx, settings: Settings) -> Job {
-    Job::spawn("Comparaison", ctx, move |_| {
+    Job::spawn(t("app.job.comparison"), ctx, move |_| {
         let data = std::fs::read(file.root.join(&file.rel)).map_err(|e| e.to_string())?;
         method
             .preview(&file, &data, &settings)

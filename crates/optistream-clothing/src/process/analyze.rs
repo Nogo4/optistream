@@ -1,6 +1,7 @@
 //! Analysis of one parsed file: texture issues and polygon budgets.
 
 use optistream_core::{FileAnalysis, Issue};
+use optistream_i18n::{self as i18n, tf};
 use optistream_rage::drawable::DrawableInfo;
 use optistream_rage::texture::format as tf;
 use optistream_texture::format::{self as fmt};
@@ -22,23 +23,23 @@ fn tex_issues(t: &TexItem, data: Option<&[u8]>, cfg: &Config, skin: bool, out: &
     let mut problems = Vec::new();
     if !fmt::is_pot(w) || !fmt::is_pot(h) {
         if Config::keeps_dims(role, skin) {
-            out.push(Issue::info(format!("texture {name} ({}) : {w}×{h}, dimensions conservées (diffuse de peau _r)", role.label())));
+            out.push(Issue::info(tf!("clothing.analyze.skin_dims", name = name, role = role.label(), width = w, height = h)));
         } else if policy.force_pot {
-            problems.push("pas une puissance de 2".to_owned());
+            problems.push(i18n::t("clothing.analyze.not_pot").to_owned());
         }
     }
     if policy.convert_formats {
         match e.format {
-            tf::BC7 | tf::DXT3 => problems.push(format!("format {}", fmt::name(e.format))),
+            tf::BC7 | tf::DXT3 => problems.push(tf!("clothing.analyze.format", format = fmt::name(e.format))),
             tf::A8R8G8B8 | tf::A8B8G8R8 | tf::X8R8G8B8 | tf::A1R5G5B5 | tf::A16B16G16R16 => {
-                problems.push(format!("non compressée ({})", fmt::name(e.format)))
+                problems.push(tf!("clothing.analyze.uncompressed", format = fmt::name(e.format)))
             }
             _ => {}
         }
     }
     if fmt::layout(e.format).is_none() {
         // Left as it is by the optimiser: say so, such a texture is often the heavy one.
-        out.push(Issue::info(format!("texture {name} ({}) : format {} non géré, laissée telle quelle", role.label(), fmt::name(e.format))));
+        out.push(Issue::info(tf!("clothing.analyze.unsupported_format", name = name, role = role.label(), format = fmt::name(e.format))));
     }
     let full = fmt::full_levels(w, h);
     if policy.fix_mips && (e.levels as u32) < full {
@@ -47,17 +48,23 @@ fn tex_issues(t: &TexItem, data: Option<&[u8]>, cfg: &Config, skin: bool, out: &
         let (tw, th) = plan::target_dims(&t.meta(), &policy);
         let kept_as_stored = (0..(e.levels as u32).max(1)).any(|l| fmt::level_dims(w, h, l) == (tw, th));
         if kept_as_stored && data.is_some_and(|d| plan::punch_through_blocks_mips(&t.meta(), d)) {
-            out.push(Issue::info(format!(
-                "texture {name} ({}) : mipmaps incomplets ({}/{full}), non complétables : alpha 1 bit DXT1",
-                role.label(),
-                e.levels
+            out.push(Issue::info(tf!(
+                "clothing.analyze.mips_punch_through",
+                name = name,
+                role = role.label(),
+                levels = e.levels,
+                full = full
             )));
         } else {
-            problems.push(if e.levels <= 1 { "sans mipmaps".to_owned() } else { format!("mipmaps incomplets ({}/{full})", e.levels) });
+            problems.push(if e.levels <= 1 {
+                i18n::t("clothing.analyze.no_mips").to_owned()
+            } else {
+                tf!("clothing.analyze.incomplete_mips", levels = e.levels, full = full)
+            });
         }
     }
     if !problems.is_empty() {
-        out.push(Issue::warning(format!("texture {} ({}) : {}", name, role.label(), problems.join(", "))));
+        out.push(Issue::warning(tf!("clothing.analyze.texture_problems", name = name, role = role.label(), problems = problems.join(", "))));
     }
 }
 
@@ -88,23 +95,25 @@ pub fn analyze(p: &Parsed, cfg: &Config, info: &FileInfo) -> FileAnalysis {
     let mut parts = Vec::new();
     if !p.textures.is_empty() {
         let max = p.textures.iter().map(|t| t.entry.width.max(t.entry.height)).max().unwrap_or(0);
-        parts.push(format!("{} texture(s), max {max} px", p.textures.len()));
+        parts.push(tf!("clothing.analyze.summary_textures", count = p.textures.len(), max = max));
     }
     if p.kind == Kind::Ydd {
         let tris: u64 = p.drawables.iter().map(|d| d.lod_triangles(0)).sum();
         a.triangles = Some(tris);
-        parts.push(format!("High {} tris", group(tris)));
+        parts.push(tf!("clothing.analyze.summary_high", triangles = group(tris)));
         let budget = cfg.budget_for_slot(slot);
         if cloth_file || p.drawables.iter().any(has_cloth) {
-            a.issues.push(Issue::info("cloth : maillage protégé (non décimé)"));
+            a.issues.push(Issue::info(i18n::t("clothing.analyze.cloth")));
         }
         if !cloth_file {
             if let Some((i, worst)) = heaviest_high(&p.drawables).filter(|&(_, t)| t > budget) {
-                let which = if p.drawables.len() > 1 { format!(", drawable #{i}") } else { String::new() };
-                a.issues.push(Issue::warning(format!(
-                    "LOD High {} triangles > budget {} ({slot}{which})",
-                    group(worst),
-                    group(budget)
+                let which = if p.drawables.len() > 1 { tf!("clothing.analyze.drawable_index", index = i) } else { String::new() };
+                a.issues.push(Issue::warning(tf!(
+                    "clothing.analyze.over_budget",
+                    triangles = group(worst),
+                    budget = group(budget),
+                    slot = slot,
+                    which = which
                 )));
             }
         }

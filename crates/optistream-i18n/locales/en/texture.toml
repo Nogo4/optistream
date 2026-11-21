@@ -1,0 +1,23 @@
+# texture messages (en). Keys are looked up as "texture.<key>".
+
+# Texture roles
+role.diffuse = "diffuse"
+role.normal = "normal"
+role.specular = "spec"
+role.other = "other"
+
+# Reasons a texture keeps its size (budget warning)
+hold.protected = "protected or unknown role"
+
+# Memory budget warnings
+budget.mips_not_completed = "missing mipmaps not completed: memory would have gone from {before} to {after}"
+budget.over_budget = "still at {size} (budget {budget}): limits reached, remaining textures — {reasons}"
+budget.reason = "{label}: {size}"
+budget.blocked_loss = "maximum loss reached"
+budget.blocked_min_size = "at the minimum size"
+budget.blocked_max_steps = "max halvings reached"
+budget.texture_error = "texture {name}: {error}"
+
+# Texture data location
+resource.outside_graphics = "texture {name}: data outside the graphics segment, skipped"
+resource.unknown_refs = "textures left unchanged: {count} unknown graphics reference(s) ({list})"

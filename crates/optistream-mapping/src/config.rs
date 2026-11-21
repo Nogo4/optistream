@@ -1,6 +1,7 @@
 //! Parameters, presets and their typed view.
 
 use optistream_core::{ParamKind, ParamSpec, Preset, Settings, Value};
+use optistream_i18n::t;
 use optistream_texture::TexturePolicy;
 
 pub const OPT_MIN_PHYSICAL: &str = "opt.min_physical_mib";
@@ -18,53 +19,54 @@ pub const BUDGET_FORCE: &str = "budget.force";
 pub const FORCE_MIN_SIZE: u32 = 64;
 pub const FORCE_MAX_STEPS: u32 = 6;
 
-/// Default largest loss accepted for a texture (Équilibré), see [`optistream_texture::quality`]:
+/// Default largest loss accepted for a texture (Balanced), see [`optistream_texture::quality`]:
 /// a wood floor ÷2 passes (1.5 %), a slatted wall (3.0 %) or printed text (14 %) does not.
 pub const DEFAULT_MAX_LOSS: f64 = 1.6;
 
 pub fn params() -> Vec<ParamSpec> {
     let flag = |key, label, group, help| ParamSpec { key, label, group, help, kind: ParamKind::Bool };
+    let (textures, budget) = (t("mapping.group.textures"), t("mapping.group.budget"));
     vec![
         ParamSpec {
             key: OPT_MIN_PHYSICAL,
-            label: "Mémoire physique minimale",
-            group: "Général",
-            help: "Seuls les fichiers dont la mémoire physique déclarée dépasse cette valeur sont optimisés ; 16 Mio est le seuil d'avertissement de FiveM. 0 : tous les fichiers.",
-            kind: ParamKind::Int { min: 0, max: 128, step: 4, unit: "Mio" },
+            label: t("mapping.param.min_physical.label"),
+            group: t("mapping.group.general"),
+            help: t("mapping.param.min_physical.help"),
+            kind: ParamKind::Int { min: 0, max: 128, step: 4, unit: t("mapping.unit.mib") },
         },
-        flag(TEX_CONVERT, "Convertir BC7 / DXT3 / non compressé", "Textures", "Normal maps → DXT5 ; autres → DXT1, ou DXT5 si l'alpha est réellement utilisé. Les DXT1 / DXT5 gardent leur format."),
-        flag(TEX_FORCE_POT, "Forcer les puissances de 2", "Textures", "Arrondi vers le bas : 3000×3000 → 2048×2048, etc."),
-        flag(TEX_FIX_MIPS, "Compléter les mipmaps", "Textures", "Chaîne complète jusqu'à 4 px, comme le jeu de base."),
-        flag(BUDGET_ENABLED, "Réduire jusqu'au budget", "Réduction ciblée", "Si le fichier dépasse encore le budget après les corrections, les textures qui perdent le moins à être divisées par 2 le sont, une à la fois, jusqu'à passer sous le budget ou atteindre les limites ci-dessous."),
+        flag(TEX_CONVERT, t("mapping.param.convert.label"), textures, t("mapping.param.convert.help")),
+        flag(TEX_FORCE_POT, t("mapping.param.force_pot.label"), textures, t("mapping.param.force_pot.help")),
+        flag(TEX_FIX_MIPS, t("mapping.param.fix_mips.label"), textures, t("mapping.param.fix_mips.help")),
+        flag(BUDGET_ENABLED, t("mapping.param.budget_enabled.label"), budget, t("mapping.param.budget_enabled.help")),
         ParamSpec {
             key: BUDGET_MIB,
-            label: "Budget",
-            group: "Réduction ciblée",
-            help: "Mémoire physique visée par fichier. 16 Mio : plus d'avertissement FiveM.",
-            kind: ParamKind::Int { min: 4, max: 64, step: 2, unit: "Mio" },
+            label: t("mapping.param.budget.label"),
+            group: budget,
+            help: t("mapping.param.budget.help"),
+            kind: ParamKind::Int { min: 4, max: 64, step: 2, unit: t("mapping.unit.mib") },
         },
         ParamSpec {
             key: BUDGET_MAX_STEPS,
-            label: "Divisions max par texture",
-            group: "Réduction ciblée",
-            help: "1 division = largeur et hauteur ÷ 2 (mémoire ÷ 4).",
+            label: t("mapping.param.max_steps.label"),
+            group: budget,
+            help: t("mapping.param.max_steps.help"),
             kind: ParamKind::Int { min: 1, max: 4, step: 1, unit: "" },
         },
         ParamSpec {
             key: BUDGET_MIN_SIZE,
-            label: "Taille minimale",
-            group: "Réduction ciblée",
-            help: "Une texture n'est jamais réduite sous cette taille (petit côté).",
+            label: t("mapping.param.min_size.label"),
+            group: budget,
+            help: t("mapping.param.min_size.help"),
             kind: ParamKind::Choice(vec![(128, "128 px"), (256, "256 px"), (512, "512 px"), (1024, "1024 px")]),
         },
         ParamSpec {
             key: BUDGET_MAX_LOSS,
-            label: "Perte maximale",
-            group: "Réduction ciblée",
-            help: "Écart moyen toléré entre la texture réduite et l'originale, en % de la plage noir → blanc (0 % : identique). Repères : mur de plâtre ÷2 ≈ 0,9 %, parquet ÷2 ≈ 1,5 %, lames de bois ÷2 ≈ 3 %, texte imprimé ≈ 14 %. Une texture qui perdrait plus n'est pas réduite.",
+            label: t("mapping.param.max_loss.label"),
+            group: budget,
+            help: t("mapping.param.max_loss.help"),
             kind: ParamKind::Float { min: 0.1, max: 10.0, step: 0.1, unit: "%" },
         },
-        flag(BUDGET_FORCE, "Forcer sous le budget", "Réduction ciblée", "Si les limites ci-dessus ne suffisent pas, la réduction continue au-delà (perte, divisions, taille minimale jusqu'à 64 px), toujours en commençant par les textures qui perdent le moins ; les textes / logos et les rôles inconnus passent en dernier. Les palettes, émissives et script_rt ne sont jamais réduites."),
+        flag(BUDGET_FORCE, t("mapping.param.force.label"), budget, t("mapping.param.force.help")),
     ]
 }
 
@@ -85,9 +87,9 @@ fn preset(id: &'static str, label: &'static str, description: &'static str, budg
 
 pub fn presets() -> Vec<Preset> {
     vec![
-        preset("leger", "Léger", "Textures : conversion, puissance de 2, mipmaps. Aucune réduction de taille.", false, 2, 512, DEFAULT_MAX_LOSS, false),
-        preset("equilibre", "Équilibré", "Comme Léger, puis réduction ciblée jusqu'à 16 Mio : 2 divisions max, jamais sous 512 px, perte faible.", true, 2, 512, DEFAULT_MAX_LOSS, false),
-        preset("fort", "Fort", "Réduction ciblée plus poussée (3 divisions max, 256 px, perte moyenne) ; si ça ne suffit pas, réduction forcée jusqu'à passer sous 16 Mio.", true, 3, 256, DEFAULT_MAX_LOSS * 2.0, true),
+        preset("leger", t("mapping.preset.leger.label"), t("mapping.preset.leger.description"), false, 2, 512, DEFAULT_MAX_LOSS, false),
+        preset("equilibre", t("mapping.preset.equilibre.label"), t("mapping.preset.equilibre.description"), true, 2, 512, DEFAULT_MAX_LOSS, false),
+        preset("fort", t("mapping.preset.fort.label"), t("mapping.preset.fort.description"), true, 3, 256, DEFAULT_MAX_LOSS * 2.0, true),
     ]
 }
 

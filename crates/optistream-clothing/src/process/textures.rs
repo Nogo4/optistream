@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{bail, ensure, Result};
+use optistream_i18n::{self as i18n, tf};
 use optistream_rage::gfx::{self, GfxBlock};
 use optistream_rage::texture::{self as rtex};
 use optistream_rage::pages;
@@ -20,7 +21,7 @@ use crate::process::{FileInfo, Parsed, TexItem};
 /// texture is always rewritten (its dimensions changed) and always gets its mips back.
 pub(super) fn optimize_texture(t: &TexItem, original: &[u8], cfg: &Config, skin: bool, window: Option<&Window>) -> Result<Option<plan::Encoded>> {
     let Some(role) = role_of(t.usage) else {
-        ensure!(window.is_none(), "texture protégée dans un groupe recadré");
+        ensure!(window.is_none(), i18n::t("clothing.error.protected_in_crop"));
         return Ok(None);
     };
     let mut policy = cfg.texture_policy(role, skin, t.alpha_mask);
@@ -46,11 +47,27 @@ pub(super) fn optimize_texture(t: &TexItem, original: &[u8], cfg: &Config, skin:
     };
     // Changes are listed against the original texture, not the cropped intermediate.
     enc.changes.retain(|c| !c.starts_with("mips "));
-    enc.changes.insert(0, format!("recadrée {}×{} → {}×{}", t.entry.width, t.entry.height, meta.width, meta.height));
+    enc.changes.insert(
+        0,
+        tf!(
+            "clothing.change.texture_cropped",
+            from_width = t.entry.width,
+            from_height = t.entry.height,
+            to_width = meta.width,
+            to_height = meta.height
+        ),
+    );
     if enc.levels != t.entry.levels as u32 {
-        enc.changes.push(format!("mips {} → {}", t.entry.levels, enc.levels));
+        enc.changes.push(tf!("clothing.change.mips", before = t.entry.levels, after = enc.levels));
     }
     Ok(Some(enc))
+}
+
+/// Whether a change line is the crop line [`optimize_texture`] puts first (in any language:
+/// compared with the text of the message before its first placeholder).
+pub(super) fn is_crop_change(change: &str) -> bool {
+    let template = i18n::t("clothing.change.texture_cropped");
+    change.starts_with(&template[..template.find('{').unwrap_or(template.len())])
 }
 
 /// Unique pixel blocks (graphics offset → textures using them), or why the textures of the
@@ -72,7 +89,7 @@ pub(super) fn optimize_textures(p: &mut Parsed, cfg: &Config, info: &FileInfo, w
     let blocks = match texture_blocks(p) {
         Ok(b) => b,
         // The UVs of the group are rewritten: leaving these textures whole would misplace them.
-        Err(why) if info.crop.is_some() => bail!("recadrage impossible : {why}"),
+        Err(why) if info.crop.is_some() => bail!(tf!("clothing.error.crop_impossible", reason = why)),
         Err(why) => {
             warnings.push(why);
             return Ok(Vec::new());
@@ -90,12 +107,12 @@ pub(super) fn optimize_textures(p: &mut Parsed, cfg: &Config, info: &FileInfo, w
                 (e.width, e.height, e.format, e.levels) == (first.entry.width, first.entry.height, first.entry.format, first.entry.levels)
             });
             if !same_header {
-                ensure!(info.crop.is_none(), "texture {} : données partagées par des en-têtes différents", first.entry.name);
+                ensure!(info.crop.is_none(), tf!("clothing.error.shared_data", name = first.entry.name));
                 return Ok(None);
             }
             let original = &p.res.graphics[*off..*off + first.data_len];
             optimize_texture(first, original, cfg, skin, info.crop.as_ref())
-                .map_err(|e| anyhow::anyhow!("texture {} : {e:#}", first.entry.name))
+                .map_err(|e| anyhow::anyhow!(tf!("clothing.error.texture", name = first.entry.name, error = format!("{e:#}"))))
         })
         .collect::<Result<_>>()?;
 
@@ -120,7 +137,7 @@ pub(super) fn optimize_textures(p: &mut Parsed, cfg: &Config, info: &FileInfo, w
                         enc.levels as u8,
                     );
                 }
-                changes.push(format!("texture {} : {}", first.entry.name, enc.changes.join(", ")));
+                changes.push(tf!("clothing.change.texture", name = first.entry.name, changes = enc.changes.join(", ")));
                 new_blocks.push(GfxBlock { data: enc.data, refs });
             }
             None => new_blocks.push(GfxBlock { data: p.res.graphics[off..off + first.data_len].to_vec(), refs }),
@@ -137,7 +154,7 @@ pub(super) fn optimize_textures(p: &mut Parsed, cfg: &Config, info: &FileInfo, w
         if layout.size() >= p.res.graphics_flags.size() {
             return Ok(Vec::new());
         }
-        changes.push("pages graphiques recompactées".to_owned());
+        changes.push(i18n::t("clothing.change.graphics_repacked").to_owned());
     }
     gfx::rebuild(&mut p.res, new_blocks)?;
     Ok(changes)

@@ -1,0 +1,42 @@
+# core messages (fr). Keys are looked up as "core.<key>".
+
+# Size units
+size.mib = "{size} Mio"
+
+# Analysis notes added by the pipeline
+analysis.skipped = " — ignoré avec les réglages actuels"
+analysis.physical_over = "mémoire physique déclarée {size} (FiveM avertit au-delà de 16 Mio){skipped}"
+analysis.virtual_over = "mémoire virtuelle déclarée {size} (> 16 Mio){skipped}"
+
+# Errors
+error.internal_crash = "plantage interne : {msg}"
+error.unknown_cause = "cause inconnue"
+error.export_is_source = "le dossier d'export ne peut pas être le dossier source lui-même"
+error.export_inside_source = "le dossier d'export ne peut pas se trouver à l'intérieur de la ressource source"
+error.export_not_empty = "le dossier {path} existe déjà et n'est pas vide"
+error.writing = "écriture de {path}"
+error.replacing = "remplacement de {path}"
+error.copying = "copie de {path}"
+
+# Text report
+report.header = "OptiStream — {method}"
+report.source = "Source      : {path}"
+report.destination = "Destination : {path}{in_place}"
+report.in_place = " (modification sur place)"
+report.duration = "Durée       : {seconds} s{cancelled}"
+report.cancelled = " (annulé)"
+report.files = "Fichiers traités : {processed}, optimisés : {optimized}, erreurs : {errors}, autres fichiers copiés : {copied}"
+report.disk = "Disque           : {before} → {after}"
+report.physical = "Mémoire physique : {before} → {after}"
+report.virtual = "Mémoire virtuelle: {before} → {after}"
+report.warnings = "Fichiers > 16 Mio (avertissement FiveM) : {before} → {after}"
+report.not_written = "ATTENTION : {count} fichier(s) non écrit(s), la destination est incomplète :"
+report.by_resource = "Par ressource (> 16 Mio avant → après, mémoire physique) :"
+report.root = "(racine)"
+report.resource_line = "{name} : {warnings_before} → {warnings_after}, {before} → {after}, {optimized} optimisé(s){errors}"
+report.resource_errors = ", {count} erreur(s)"
+report.resource_checks = "Contrôles de la ressource :"
+report.detail = "Détail :"
+report.file_error = "- {path} : ERREUR {error}"
+report.file_line = "- {path} : physique {before} → {after}{virt}, disque {disk_before} → {disk_after}"
+report.file_virtual = ", virtuelle {before} → {after}"

@@ -19,6 +19,7 @@ mod tests;
 pub use plan::plan_file;
 pub use write::apply;
 
+use optistream_i18n::tf;
 use optistream_rage::texture::TextureEntry;
 
 use crate::format::{chain_size, full_levels};
@@ -27,13 +28,15 @@ use crate::{Encoded, TextureMeta, TexturePolicy, TextureRole};
 /// Why a texture keeps its size, for the warning of a file left above the budget.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hold {
+    /// Catalogue key of the reason (`"texture.hold.protected"`), translated when the warning
+    /// is built; text that is not a key is shown as is.
     pub label: &'static str,
     /// Order of the reasons in the warning (lowest first).
     pub rank: u8,
 }
 
 /// Holds every method shares.
-pub const HOLD_PROTECTED: Hold = Hold { label: "protégées ou rôle inconnu", rank: 20 };
+pub const HOLD_PROTECTED: Hold = Hold { label: "texture.hold.protected", rank: 20 };
 
 /// When a texture may be halved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,5 +157,5 @@ impl Candidate {
 }
 
 pub(crate) fn mib(bytes: u64) -> String {
-    format!("{:.1} Mio", bytes as f64 / (1024.0 * 1024.0))
+    tf!("core.size.mib", size = format!("{:.1}", bytes as f64 / (1024.0 * 1024.0)))
 }

@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
+use optistream_i18n::tf;
 use optistream_rage::drawable::DrawableInfo;
 use optistream_rage::gfx;
 use optistream_rage::texture::TextureEntry;
@@ -69,7 +70,7 @@ pub fn texture_blocks(
     for (i, u) in users.iter().enumerate() {
         match u.data_off {
             Some(off) => blocks.entry(off).or_default().push(i),
-            None => return Err(format!("texture {} : données hors du segment graphique, ignorée", u.name)),
+            None => return Err(tf!("texture.resource.outside_graphics", name = u.name)),
         }
     }
     let fields: HashSet<usize> = users.iter().map(|u| u.ptr_field).collect();
@@ -86,10 +87,10 @@ pub fn texture_blocks(
     if !unknown.is_empty() {
         let list: Vec<String> =
             unknown.iter().take(3).map(|&o| format!("0x{o:X}→0x{:X}", res.u64_at(o).unwrap_or(0))).collect();
-        return Err(format!(
-            "textures non modifiées : {} référence(s) graphique(s) inconnue(s) ({})",
-            unknown.len(),
-            list.join(", ")
+        return Err(tf!(
+            "texture.resource.unknown_refs",
+            count = unknown.len(),
+            list = list.join(", ")
         ));
     }
     Ok(blocks)

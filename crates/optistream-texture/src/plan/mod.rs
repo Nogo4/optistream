@@ -16,6 +16,8 @@ mod mips;
 pub use optimize::{optimize, target_dims};
 pub use mips::{decode_top, punch_through_blocks_mips};
 
+use optistream_i18n::t;
+
 use crate::ops::ColorSpace;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -37,10 +39,10 @@ impl TextureRole {
 
     pub fn label(self) -> &'static str {
         match self {
-            TextureRole::Diffuse => "diffuse",
-            TextureRole::Normal => "normal",
-            TextureRole::Specular => "spec",
-            TextureRole::Other => "autre",
+            TextureRole::Diffuse => t("texture.role.diffuse"),
+            TextureRole::Normal => t("texture.role.normal"),
+            TextureRole::Specular => t("texture.role.specular"),
+            TextureRole::Other => t("texture.role.other"),
         }
     }
 }

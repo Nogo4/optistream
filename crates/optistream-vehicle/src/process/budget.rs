@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use optistream_mapping::roles::Usage;
+use optistream_i18n::{t, tf};
 use optistream_texture::budget::{self, Access, BlockPlan, BudgetTex, FilePlan, Hold, Rule, HOLD_PROTECTED};
 use optistream_texture::resource as texres;
 use optistream_texture::TextureRole;
@@ -10,21 +11,30 @@ use crate::config::{Config, LIVERY_FLOOR};
 use crate::process::{Class, Parsed, Tex};
 use crate::roles;
 
-const HOLD_LIVERY: Hold = Hold { label: "livrées à 1024 px (plancher)", rank: 5 };
-const HOLD_LIGHTS: Hold = Hold { label: "feux / gyrophares / vitres (nom)", rank: 10 };
-const HOLD_SMALL: Hold = Hold { label: "petites textures conservées (préréglage)", rank: 15 };
+// Functions rather than constants: the labels follow the current language.
+fn hold_livery() -> Hold {
+    Hold { label: t("vehicle.hold.livery"), rank: 5 }
+}
+
+fn hold_lights() -> Hold {
+    Hold { label: t("vehicle.hold.lights"), rank: 10 }
+}
+
+fn hold_small() -> Hold {
+    Hold { label: t("vehicle.hold.small"), rank: 15 }
+}
 
 pub(crate) fn rule(t: &Tex, cfg: &Config) -> Rule {
     let (access, tier) = match t.class {
         Class::HiCopy | Class::Livery | Class::Big => (Access::Normal, 0),
         Class::Small if cfg.small => (Access::Normal, 1),
-        Class::Small => (Access::Never(HOLD_SMALL), 1),
+        Class::Small => (Access::Never(hold_small()), 1),
         Class::Last if t.usage == Usage::Role(TextureRole::Other) && !roles::light_or_glass_by_name(&t.entry.name) => {
             (Access::ForceOnly(HOLD_PROTECTED), 2)
         }
-        Class::Last => (Access::ForceOnly(HOLD_LIGHTS), 2),
+        Class::Last => (Access::ForceOnly(hold_lights()), 2),
     };
-    let (hard_floor, hard_floor_hold) = if t.livery { (LIVERY_FLOOR, Some(HOLD_LIVERY)) } else { (0, None) };
+    let (hard_floor, hard_floor_hold) = if t.livery { (LIVERY_FLOOR, Some(hold_livery())) } else { (0, None) };
     // A livery may always go down to its 1024 px floor: the user set that size as its quality bar.
     Rule { access, tier, min_size: cfg.min_size, max_steps: cfg.max_steps, hard_floor, hard_floor_hold, ignore_loss: t.livery }
 }
@@ -49,9 +59,20 @@ pub fn plan_file(p: &Parsed, cfg: &Config) -> Result<FilePlan> {
 pub(super) fn describe(p: &Parsed, b: &BlockPlan) -> Option<String> {
     let enc = b.enc.as_ref()?;
     let t = &p.textures[b.users[0]];
-    let mut s = format!("texture {} ({}) : {}", t.entry.name, t.label(), enc.changes.join(", "));
+    let mut s = tf!("vehicle.change.texture", name = t.entry.name, label = t.label(), changes = enc.changes.join(", "));
     if b.steps > 0 {
-        s += &format!(" — réduction ciblée ÷{} (perte {:.1} %){}", 1u32 << b.steps, b.loss, if b.forced { ", forcée" } else { "" });
+        s += " — ";
+        s += &reduction(b);
     }
     Some(s)
+}
+
+/// `targeted reduction ÷N (loss x %)`, plus `, forced` when forced (also used by the preview).
+pub(super) fn reduction(b: &BlockPlan) -> String {
+    let mut s = tf!("vehicle.change.reduction", factor = 1u32 << b.steps, loss = format!("{:.1}", b.loss));
+    if b.forced {
+        s += ", ";
+        s += t("vehicle.change.forced");
+    }
+    s
 }

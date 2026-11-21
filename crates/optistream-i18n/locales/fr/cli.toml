@@ -1,0 +1,17 @@
+# cli messages (fr). Keys are looked up as "cli.<key>".
+
+# Usage and argument errors
+usage = "utilisation : optistream-cli [--lang en|fr] (analyze|optimize|crops|inspect|verify) ..."
+error.unknown_lang = "langue inconnue {lang} (en|fr)"
+error.unknown_method = "méthode inconnue {method} (clothing|mapping|vehicle)"
+error.unknown_preset = "préréglage inconnu"
+error.set_syntax = "--set attend clé=valeur"
+error.unknown_setting = "réglage inconnu {key}"
+error.missing_dir = "dossier de la ressource manquant"
+error.output_choice = "choisis exactement une option entre --out <dossier> et --in-place"
+error.unknown_kind = "type de fichier inconnu"
+
+# Command output
+analyze.summary = "{files} fichiers analysés, {other} autres fichiers"
+verify.summary = "{count} fichier(s) vérifié(s), {bad} en échec"
+crops.nothing_to_gain = "rien à gagner"

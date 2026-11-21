@@ -1,6 +1,7 @@
 //! Parameters, presets and their typed view.
 
 use optistream_core::{ParamKind, ParamSpec, Preset, Settings, Value};
+use optistream_i18n::t;
 use optistream_texture::{TexturePolicy, TextureRole};
 
 pub const OPT_ONLY_3D: &str = "opt.only_3d";
@@ -25,57 +26,59 @@ pub const GEO_BUDGET: u64 = 16 * 1024 * 1024;
 
 pub fn params() -> Vec<ParamSpec> {
     let flag = |key, label, group, help| ParamSpec { key, label, group, help, kind: ParamKind::Bool };
+    let (textures, general, meshes, virtual_memory) =
+        (t("clothing.group.textures"), t("clothing.group.general"), t("clothing.group.meshes"), t("clothing.group.virtual_memory"));
     vec![
-        flag(TEX_CONVERT, "Convertir BC7 / DXT3 / non compressé", "Textures", "Normal maps → DXT5 ; autres → DXT1, ou DXT5 si l'alpha est réellement utilisé. Les DXT1 / DXT5 gardent leur format."),
-        flag(TEX_FORCE_POT, "Forcer les puissances de 2", "Textures", "Arrondi vers le bas : 3000×3000 → 2048×2048, etc. (sauf diffuses de peau _r)."),
-        flag(TEX_FIX_MIPS, "Compléter les mipmaps", "Textures", "Chaîne complète jusqu'à 4 px, comme le jeu de base."),
-        flag(TEX_HALVE, "Diviser par 2", "Textures", "Toutes les textures des fichiers traités sont réduites de moitié (sauf diffuses de peau _r)."),
-        flag(TEX_CROP, "Recadrer sur la zone utilisée", "Textures", "Les textures sont coupées à la partie de la feuille que le vêtement utilise vraiment (sans perte), et ses UV réécrites. S'applique au .ydd, à son _1.ydd et à toutes ses variations ensemble ; jamais aux pièces _r, cloth ou à textures répétées."),
-        flag(OPT_ONLY_3D, "Fichiers 3D uniquement (.ydd)", "Général", "Optimise seulement les .ydd ; les .ytd sont laissés tels quels."),
+        flag(TEX_CONVERT, t("clothing.param.tex_convert.label"), textures, t("clothing.param.tex_convert.help")),
+        flag(TEX_FORCE_POT, t("clothing.param.tex_force_pot.label"), textures, t("clothing.param.tex_force_pot.help")),
+        flag(TEX_FIX_MIPS, t("clothing.param.tex_fix_mips.label"), textures, t("clothing.param.tex_fix_mips.help")),
+        flag(TEX_HALVE, t("clothing.param.tex_halve.label"), textures, t("clothing.param.tex_halve.help")),
+        flag(TEX_CROP, t("clothing.param.tex_crop.label"), textures, t("clothing.param.tex_crop.help")),
+        flag(OPT_ONLY_3D, t("clothing.param.only_3d.label"), general, t("clothing.param.only_3d.help")),
         ParamSpec {
             key: OPT_MIN_PHYSICAL,
-            label: "Mémoire physique minimale",
-            group: "Général",
-            help: "Seuls les fichiers dont la mémoire physique déclarée dépasse cette valeur sont optimisés (ou la mémoire virtuelle, si « Réduire sous 16 Mio de mémoire virtuelle » est actif) ; 16 Mio est le seuil d'avertissement de FiveM. 0 : tous les fichiers.",
-            kind: ParamKind::Int { min: 0, max: 128, step: 4, unit: "Mio" },
+            label: t("clothing.param.min_physical.label"),
+            group: general,
+            help: t("clothing.param.min_physical.help"),
+            kind: ParamKind::Int { min: 0, max: 128, step: 4, unit: t("clothing.unit.mib") },
         },
-        flag(MESH_ENABLED, "Réduire les polygones", "Maillages", "Décimation du LOD High au-dessus du budget (jamais sur le cloth)."),
-        flag(MESH_REORDER, "Optimiser l'ordre des triangles (sans perte)", "Maillages", "Cache de sommets et overdraw, triangles dégénérés ou en double retirés. Sommets inchangés ; shaders à transparence exclus."),
+        flag(MESH_ENABLED, t("clothing.param.mesh_enabled.label"), meshes, t("clothing.param.mesh_enabled.help")),
+        flag(MESH_REORDER, t("clothing.param.mesh_reorder.label"), meshes, t("clothing.param.mesh_reorder.help")),
         ParamSpec {
             key: MESH_BUDGET_LARGE,
-            label: "Budget grosses pièces",
-            group: "Maillages",
-            help: "Triangles max du LOD High : hauts, bas, vestes, accessoires, sacs, cheveux, chaussures, masques.",
-            kind: ParamKind::Int { min: 2_000, max: 200_000, step: 1_000, unit: "tris" },
+            label: t("clothing.param.mesh_budget_large.label"),
+            group: meshes,
+            help: t("clothing.param.mesh_budget_large.help"),
+            kind: ParamKind::Int { min: 2_000, max: 200_000, step: 1_000, unit: t("clothing.unit.tris") },
         },
         ParamSpec {
             key: MESH_BUDGET_SMALL,
-            label: "Budget petites pièces",
-            group: "Maillages",
-            help: "Triangles max du LOD High : chaînes, mains, decals, props (montres, chapeaux, lunettes…).",
-            kind: ParamKind::Int { min: 500, max: 100_000, step: 500, unit: "tris" },
+            label: t("clothing.param.mesh_budget_small.label"),
+            group: meshes,
+            help: t("clothing.param.mesh_budget_small.help"),
+            kind: ParamKind::Int { min: 500, max: 100_000, step: 500, unit: t("clothing.unit.tris") },
         },
         ParamSpec {
             key: MESH_MAX_ERROR,
-            label: "Tolérance de déformation",
-            group: "Maillages",
-            help: "Écart de forme maximal, en % de la taille de la pièce. La réduction s'arrête avant, même si le budget n'est pas atteint.",
+            label: t("clothing.param.mesh_max_error.label"),
+            group: meshes,
+            help: t("clothing.param.mesh_max_error.help"),
             kind: ParamKind::Float { min: 0.05, max: 5.0, step: 0.05, unit: "%" },
         },
-        flag(MESH_LOWER_LODS, "Plafonner les LOD inférieurs", "Maillages", "Un LOD Med/Low plus lourd que le nouveau High est réduit à sa taille."),
-        flag(GEO_ENABLED, "Réduire sous 16 Mio de mémoire virtuelle", "Mémoire virtuelle", "Si un .ydd dépasse encore 16 Mio de mémoire virtuelle (avertissement FiveM) après le budget de triangles, ses polygones sont réduits jusqu'à passer dessous : LODs lointains d'abord (VLow, Low, Med), le LOD High seulement si ça ne suffit pas. Bords, coutures et skinning préservés ; jamais sur le cloth. Le segment système est toujours recompacté (sans perte)."),
+        flag(MESH_LOWER_LODS, t("clothing.param.mesh_lower_lods.label"), meshes, t("clothing.param.mesh_lower_lods.help")),
+        flag(GEO_ENABLED, t("clothing.param.geo_enabled.label"), virtual_memory, t("clothing.param.geo_enabled.help")),
         ParamSpec {
             key: GEO_HIGH_FLOOR,
-            label: "Plancher du LOD High",
-            group: "Mémoire virtuelle",
-            help: "Part minimale des triangles que le LOD High garde pour passer sous 16 Mio (après le budget de triangles).",
+            label: t("clothing.param.geo_high_floor.label"),
+            group: virtual_memory,
+            help: t("clothing.param.geo_high_floor.help"),
             kind: ParamKind::Int { min: 50, max: 100, step: 5, unit: "%" },
         },
         ParamSpec {
             key: GEO_HIGH_ERROR,
-            label: "Tolérance du LOD High",
-            group: "Mémoire virtuelle",
-            help: "Écart de forme maximal du LOD High pendant cette réduction, en % de la taille de la pièce (les LODs lointains sont plus permissifs).",
+            label: t("clothing.param.geo_high_error.label"),
+            group: virtual_memory,
+            help: t("clothing.param.geo_high_error.help"),
             kind: ParamKind::Float { min: 0.0, max: 10.0, step: 0.1, unit: "%" },
         },
     ]
@@ -105,9 +108,9 @@ fn preset(id: &'static str, label: &'static str, description: &'static str, budg
 
 pub fn presets() -> Vec<Preset> {
     vec![
-        preset("leger", "Léger", "Textures : conversion, puissance de 2, mipmaps. ≤ 80k tris.", [80_000, 20_000], 0.2, false, false, None),
-        preset("equilibre", "Équilibré", "Textures : conversion, puissance de 2, mipmaps, recadrage sur la zone utilisée. ≤ 40k tris, puis sous 16 Mio de mémoire virtuelle (High ≥ 80 %).", [40_000, 10_000], 0.5, false, true, Some((80, 0.5))),
-        preset("fort", "Fort", "Textures : comme Équilibré, puis divisées par 2. ≤ 20k tris, puis sous 16 Mio de mémoire virtuelle (High ≥ 60 %).", [20_000, 5_000], 1.0, true, true, Some((60, 1.0))),
+        preset("leger", t("clothing.preset.light.label"), t("clothing.preset.light.description"), [80_000, 20_000], 0.2, false, false, None),
+        preset("equilibre", t("clothing.preset.balanced.label"), t("clothing.preset.balanced.description"), [40_000, 10_000], 0.5, false, true, Some((80, 0.5))),
+        preset("fort", t("clothing.preset.strong.label"), t("clothing.preset.strong.description"), [20_000, 5_000], 1.0, true, true, Some((60, 1.0))),
     ]
 }
 

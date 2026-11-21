@@ -1,5 +1,6 @@
 //! Declared sizes of a resource file and the FiveM streaming warning threshold.
 
+use optistream_i18n::tf;
 use serde::Serialize;
 
 /// FiveM starts warning about streamed assets above this declared size.
@@ -31,7 +32,7 @@ impl SizeInfo {
 }
 
 pub fn mib(bytes: u64) -> String {
-    format!("{:.1} Mio", bytes as f64 / (1024.0 * 1024.0))
+    tf!("core.size.mib", size = format!("{:.1}", bytes as f64 / (1024.0 * 1024.0)))
 }
 
 #[cfg(test)]
@@ -76,7 +77,7 @@ pub(crate) mod tests {
 
     #[test]
     fn mib_formatting() {
-        assert_eq!(mib(0), "0.0 Mio");
-        assert_eq!(mib(1024 * 1024 * 3 / 2), "1.5 Mio");
+        assert_eq!(mib(0), "0.0 MiB");
+        assert_eq!(mib(1024 * 1024 * 3 / 2), "1.5 MiB");
     }
 }

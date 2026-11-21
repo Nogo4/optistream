@@ -1,0 +1,15 @@
+# mesh messages (en). Keys are looked up as "mesh.<key>".
+
+# Geometry reduction: changes
+change.merged_vertices = "identical vertices merged (lossless): {before} → {after}"
+change.lod_triangles = "geometry {part} LOD {lod}: {before} → {after} triangles (max deviation {error} %)"
+part.main = "main"
+part.piece = "piece {index}"
+
+# Geometry reduction: warnings
+warning.nothing_reducible = "virtual memory {size} (budget {budget}): no geometry reducible within the tolerance"
+warning.over_budget = "virtual memory: still at {size} (budget {budget}): tolerance or High LOD floor reached"
+
+# Errors
+error.outside_system = "geometry data outside the system segment"
+error.buffers_changed = "geometry buffers differ from the original read"

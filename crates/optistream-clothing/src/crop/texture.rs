@@ -1,6 +1,7 @@
 //! Cropping one texture to the window, and textures too small or uniform to matter.
 
 use anyhow::{ensure, Result};
+use optistream_i18n::t;
 use optistream_texture::format::{self as fmt, Layout};
 use optistream_texture::TextureMeta;
 
@@ -28,16 +29,16 @@ pub fn crop_texture(meta: &TextureMeta, data: &[u8], w: &Window) -> Result<Optio
         return Ok(None);
     }
     let (x0, y0, cw, ch) = w.rect(meta.width, meta.height);
-    ensure!(x0 + cw <= meta.width && y0 + ch <= meta.height && cw > 0 && ch > 0, "fenêtre hors de la texture");
+    ensure!(x0 + cw <= meta.width && y0 + ch <= meta.height && cw > 0 && ch > 0, t("clothing.crop.window_outside"));
     let (unit, bytes) = match fmt::layout(meta.format) {
         Some(Layout::Block(b)) => (4, b),
         Some(Layout::Pixel(b)) => (1, b),
-        None => anyhow::bail!("format non géré"),
+        None => anyhow::bail!(t("clothing.crop.unsupported_format")),
     };
-    ensure!(x0 % unit == 0 && y0 % unit == 0 && cw % unit == 0 && ch % unit == 0, "fenêtre non alignée sur les blocs");
+    ensure!(x0 % unit == 0 && y0 % unit == 0 && cw % unit == 0 && ch % unit == 0, t("clothing.crop.window_unaligned"));
     let row = (meta.width / unit) as usize * bytes;
     let (cols, rows) = ((cw / unit) as usize, (ch / unit) as usize);
-    ensure!(data.len() >= row * (meta.height / unit) as usize, "données de texture tronquées");
+    ensure!(data.len() >= row * (meta.height / unit) as usize, t("clothing.crop.truncated_data"));
     let mut out = Vec::with_capacity(cols * rows * bytes);
     for r in 0..rows {
         let start = (y0 / unit) as usize * row + r * row + (x0 / unit) as usize * bytes;

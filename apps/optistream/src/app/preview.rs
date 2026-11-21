@@ -3,6 +3,7 @@
 use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, TextureHandle, Ui, Vec2};
 use egui_material_icons::icons::*;
 use optistream_core::{PreviewContent, PreviewImage, PreviewItem};
+use optistream_i18n::t;
 
 use crate::render::Bounds;
 use crate::theme::{self, BG, BORDER, WEAK};
@@ -37,7 +38,7 @@ pub(super) fn side(ui: &mut Ui, title: &str, desc: &str, tex: Option<&TextureHan
                     .show(ui, |ui| {
                         ui.set_min_size(size.max(Vec2::new(200.0, 80.0)));
                         ui.centered_and_justified(|ui| {
-                            ui.label(RichText::new(theme::label(ICON_CHECK_CIRCLE, "Inchangé")).color(WEAK));
+                            ui.label(RichText::new(theme::label(ICON_CHECK_CIRCLE, t("app.comparison.unchanged"))).color(WEAK));
                         });
                     });
             }

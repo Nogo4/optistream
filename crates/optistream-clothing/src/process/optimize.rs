@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::{bail, Result};
+use optistream_i18n::{t, tf};
 use optistream_mesh::budget;
 use optistream_rage::drawable::{self, DrawableInfo, GeometryInfo};
 use optistream_rage::Resource;
@@ -39,7 +40,7 @@ pub fn optimize(
     };
     if let (Kind::Ydd, Some(w)) = (kind, &info.crop) {
         let n = crop::remap_uvs(&mut p.res, &p.drawables, w)?;
-        changes.push(format!("UV recadrées sur {} ({n} sommets)", w.describe()));
+        changes.push(tf!("clothing.change.uv_cropped", window = w.describe(), vertices = n));
     }
     changes.extend(optimize_textures(&mut p, cfg, info, &mut warnings)?);
     if let Some(plan) = reorder.filter(|r| !r.writes.is_empty() && (!changes.is_empty() || r.worth_alone())) {
@@ -58,11 +59,11 @@ pub fn optimize(
     // Sanity check: the result must parse back with the same structure.
     let check = parse(kind, &out, info)?;
     if check.textures.len() != p.textures.len() || check.drawables.len() != p.drawables.len() {
-        bail!("vérification après écriture échouée");
+        bail!(t("clothing.error.write_check"));
     }
     let geoms = |ds: &[DrawableInfo]| ds.iter().map(|d| d.geometries().count()).sum::<usize>();
     if geoms(&check.drawables) != geoms(&p.drawables) {
-        bail!("vérification après écriture échouée (géométries)");
+        bail!(t("clothing.error.write_check_geometries"));
     }
     Ok((Some(out), changes, warnings))
 }
@@ -102,7 +103,7 @@ fn virtual_memory(
             warnings.extend(gp.warnings);
             if let Some(res) = res {
                 p.res = res;
-                changes.push(format!("mémoire virtuelle : {} → {}", budget::mib(before), budget::mib(gp.virtual_after)));
+                changes.push(tf!("clothing.change.virtual_memory", before = budget::mib(before), after = budget::mib(gp.virtual_after)));
                 changes.extend(gp.changes);
             }
         }
@@ -110,7 +111,7 @@ fn virtual_memory(
         // the file keeps its in-place edits.
         Err(e) => {
             if before > crate::config::GEO_BUDGET {
-                warnings.push(format!("mémoire virtuelle non réduite : {e:#}"));
+                warnings.push(tf!("clothing.warning.virtual_memory_not_reduced", error = format!("{e:#}")));
             }
         }
     }

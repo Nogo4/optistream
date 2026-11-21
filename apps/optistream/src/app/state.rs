@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use optistream_core::{AnalyzedFile, FileReport, FileStatus, Issue, Report, Severity};
+use optistream_i18n::tf;
 
 /// What is still wrong with a file after its optimisation.
 pub(super) struct Remaining {
@@ -17,11 +18,11 @@ pub(super) struct Remaining {
 pub(super) fn remaining_entry(f: &FileReport, checked: Option<&AnalyzedFile>) -> Option<Remaining> {
     let mut issues: Vec<Issue> = Vec::new();
     if let FileStatus::Error(e) = &f.status {
-        issues.push(Issue::error(format!("échec de l'optimisation : {e}")));
+        issues.push(Issue::error(tf!("app.remaining.failed", error = e)));
     }
     match checked.map(|c| &c.analysis) {
         Some(Ok(a)) => issues.extend(a.issues.iter().filter(|i| i.severity >= Severity::Warning).cloned()),
-        Some(Err(e)) => issues.push(Issue::error(format!("fichier produit illisible : {e}"))),
+        Some(Err(e)) => issues.push(Issue::error(tf!("app.remaining.unreadable", error = e))),
         None => {}
     }
     let notes = f.warnings.clone();

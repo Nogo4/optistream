@@ -2413,6 +2413,7 @@ dependencies = [
  "egui_material_icons",
  "optistream-clothing",
  "optistream-core",
+ "optistream-i18n",
  "optistream-mapping",
  "optistream-vehicle",
  "rfd",
@@ -2427,6 +2428,7 @@ dependencies = [
  "anyhow",
  "optistream-clothing",
  "optistream-core",
+ "optistream-i18n",
  "optistream-mapping",
  "optistream-rage",
  "optistream-texture",
@@ -2439,6 +2441,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "optistream-core",
+ "optistream-i18n",
  "optistream-mesh",
  "optistream-rage",
  "optistream-texture",
@@ -2450,6 +2453,7 @@ name = "optistream-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "optistream-i18n",
  "optistream-rage",
  "rayon",
  "serde",
@@ -2459,11 +2463,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "optistream-i18n"
+version = "0.1.0"
+dependencies = [
+ "sys-locale",
+ "walkdir",
+]
+
+[[package]]
 name = "optistream-mapping"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "optistream-core",
+ "optistream-i18n",
  "optistream-rage",
  "optistream-texture",
  "rayon",
@@ -2475,6 +2488,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "meshopt",
+ "optistream-i18n",
  "optistream-rage",
  "rayon",
 ]
@@ -2493,6 +2507,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "image",
+ "optistream-i18n",
  "optistream-rage",
  "rayon",
  "texpresso",
@@ -2505,6 +2520,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "optistream-core",
+ "optistream-i18n",
  "optistream-mapping",
  "optistream-mesh",
  "optistream-rage",

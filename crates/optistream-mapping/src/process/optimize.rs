@@ -2,6 +2,7 @@
 
 use anyhow::{bail, Result};
 use optistream_core::mib;
+use optistream_i18n::{t, tf};
 use optistream_texture::budget;
 
 use crate::config::Config;
@@ -25,7 +26,7 @@ pub fn optimize(kind: Kind, bytes: &[u8], cfg: &Config, index: &RoleIndex) -> Re
     if fp.physical_after > before {
         // Format fixes alone would make the file heavier (BC7 → DXT5 is the same size,
         // uncompressed alpha textures...): keep the original.
-        warnings.push(format!("non modifié : le résultat ({}) serait plus lourd que l'original ({})", mib(fp.physical_after), mib(before)));
+        warnings.push(tf!("mapping.warning.heavier", after = mib(fp.physical_after), before = mib(before)));
         return Ok((None, Vec::new(), warnings));
     }
     let any_change = !changes.is_empty();
@@ -33,7 +34,7 @@ pub fn optimize(kind: Kind, bytes: &[u8], cfg: &Config, index: &RoleIndex) -> Re
         return Ok((None, changes, warnings));
     }
     if !any_change {
-        changes.push("pages graphiques recompactées".to_owned());
+        changes.push(t("mapping.change.recompacted").to_owned());
     }
     let entries: Vec<_> = p.textures.iter().map(|t| t.entry.clone()).collect();
     let lens: Vec<usize> = p.textures.iter().map(|t| t.data_len).collect();
@@ -42,7 +43,7 @@ pub fn optimize(kind: Kind, bytes: &[u8], cfg: &Config, index: &RoleIndex) -> Re
     // Sanity check: the result must parse back with the same structure.
     let check = parse(kind, &out, index)?;
     if check.textures.len() != p.textures.len() || check.drawables.len() != p.drawables.len() {
-        bail!("vérification après écriture échouée");
+        bail!(t("mapping.error.verify"));
     }
     Ok((Some(out), changes, warnings))
 }
