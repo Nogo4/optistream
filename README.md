@@ -22,7 +22,7 @@ It ships as a desktop app (egui) and a command-line tool. Both use the same opti
 - **RSC7**: graphics pages are repacked and the RSC7 flags recomputed, since that is what FiveM measures.
 - **Never touched**: file names, drawable indices, cloth geometry, palettes, emissive and `script_rt` textures, collision / physics, and encrypted (FXAP) files.
 
-Each method has three presets: **Léger** (fixes only), **Équilibré** (the default, targeted reduction) and **Fort** (stronger reduction, and it can force a file under budget). You can change every setting individually.
+Each method has three presets: **Light** (fixes only), **Balanced** (the default, targeted reduction) and **Strong** (stronger reduction, and it can force a file under budget). Their command-line ids are `leger`, `equilibre` and `fort`. You can change every setting individually.
 
 > Always test the optimised resource in game before putting it into production.
 
@@ -42,12 +42,16 @@ Prebuilt binaries for Windows and Linux are published on the [latest release](..
 ### Command line
 
 ```
-optistream-cli analyze  <resource> [--method clothing|mapping|vehicle] [--preset leger|equilibre|fort] [--only <relative path>]...
+optistream-cli analyze  <resource> [--method clothing|mapping|vehicle] [--preset leger|equilibre|fort] [--only <relative path>]... [--lang en|fr]
 optistream-cli optimize <resource> (--out <dir> [--overwrite] | --in-place) [--method ...] [--preset ...] [--set key=value]... [--only <relative path>]...
 optistream-cli crops    <resource>      # UV crop diagnostics (clothing)
 optistream-cli inspect  <file>...       # dump RSC7 / texture / drawable details
 optistream-cli verify   <file>...       # every texture level decodes, every index is valid, segment sizes match flags
 ```
+
+### Languages
+
+OptiStream is available in **English** and **French**. On first launch it uses the system language, and the selector in the top bar switches it (the choice is remembered). The CLI takes `--lang en|fr`. Results already computed keep the language they were produced in; run the analysis again to translate them.
 
 ## Building
 
@@ -98,6 +102,7 @@ flowchart TB
 
 | Crate | Role |
 |---|---|
+| `crates/optistream-i18n` | Current language and per-language message catalogues (`locales/<lang>/<crate>.toml`) |
 | `crates/optistream-rage` | RSC7 container, page packing, texture / drawable / fragment (`.yft`) structures, system segment repacking |
 | `crates/optistream-texture` | Decoding, resizing, mip chains, DXT encoding, reduction loss metric, budget reduction engine |
 | `crates/optistream-mesh` | Skinning-safe decimation and triangle reordering |
@@ -107,6 +112,8 @@ flowchart TB
 | `crates/optistream-vehicle` | Vehicle method (liveries, textures and geometry) |
 | `apps/optistream` | Desktop application (egui) |
 | `apps/optistream-cli` | Command-line front-end |
+
+To add a language, add a `Lang` variant in `crates/optistream-i18n/src/lib.rs`, add a `locales/<code>/` folder with one file per crate, and add it to `SOURCES` in `catalog.rs`. The tests check that every language has the same keys and placeholders as English.
 
 To add a resource type, create a crate that implements `optistream_core::Method`. Then register it in `registered_methods` (`apps/optistream/src/app/mod.rs`) and in the CLI's `--method` flag.
 
